@@ -1053,12 +1053,15 @@ class Room:
             profit_str = ("+" if s.total_profit > 0 else "") + str(s.total_profit)
             role_desc = "机器人" if is_ai else "玩家"
             reason_str = f"{reason}，" if reason else ""
-            self.state.action_history.append({
-                "street": self.state.street.value,
-                "action": "SYSTEM",
-                "name": "系统",
-                "extra": f"{role_desc} {s.name} {reason_str}离开了房间 (本场盈亏: {profit_str})"
-            })
+            if self.state.action_history is not None:
+                self.state.action_history.append({
+                    "street": self.state.street.value,
+                    "action": "SYSTEM",
+                    "name": "系统",
+                    "extra": f"{role_desc} {s.name} {reason_str}离开了房间 (本场盈亏: {profit_str})"
+                })
+            else:
+                print(f"[DEBUG] 系统: {role_desc} {s.name} {reason_str}离开了房间 (本场盈亏: {profit_str})")
 
             # 如果离席的是人类玩家，且连接还存在，发送总结消息
             if not is_ai:
