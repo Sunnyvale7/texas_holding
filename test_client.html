@@ -89,9 +89,10 @@
         .table-center { text-align: center; z-index: 10; }
         #board { display: flex; gap: 10px; margin-bottom: 20px; min-height: 80px; }
         .pot-visual { 
-            background: rgba(0,0,0,0.6); padding: 10px 25px; border-radius: 30px; 
-            border: 2px solid var(--accent-gold); color: var(--accent-gold);
-            font-size: 20px; font-weight: bold; display: flex; align-items: center; gap: 10px;
+            background: rgba(0,0,0,0.7); padding: 15px 40px; border-radius: 50px; 
+            border: 3px solid var(--accent-gold); color: var(--accent-gold);
+            font-size: 28px; font-weight: 800; display: flex; align-items: center; gap: 15px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
         }
 
         /* 玩家座位 */
@@ -118,6 +119,20 @@
             position: absolute; width: 14px; height: 14px; border-radius: 50%; 
             border: 1px dashed rgba(255,255,255,0.4); left: 0;
         }
+
+        /* 庄位/盲注圆盘 */
+        .blind-marker {
+            position: absolute; width: 45px; height: 45px; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 8px; font-weight: bold; text-transform: uppercase;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6); z-index: 15;
+            transform: translate(-50%, -50%); border: 2px solid rgba(0,0,0,0.2);
+            text-align: center; line-height: 1.1; padding: 4px; box-sizing: border-box;
+        }
+        .marker-dealer { background: #ffffff; color: #333; }
+        .marker-sb { background: #fbbf24; color: #000; }
+        .marker-bb { background: #3b82f6; color: #fff; }
+
         .chip-gold { background: #fbbf24; }
         .chip-purple { background: #a855f7; }
         .chip-black { background: #1e293b; }
@@ -336,6 +351,29 @@
             document.getElementById('board').innerHTML = pub.board.map(formatCard).join('');
             document.getElementById('activePlayers').innerText = `在场: ${pub.seats.filter(s=>s.in_hand).length}人`;
 
+            // 轮次信息
+            if (pub.street !== "HAND_OVER") {
+                const currentPlayer = pub.seats[pub.to_act];
+                let nextIdx = (pub.to_act + 1) % totalSeats;
+                let nextPlayer = null;
+                for (let j = 0; j < totalSeats; j++) {
+                    const candidate = pub.seats[nextIdx];
+                    if (candidate.in_hand && !candidate.all_in) {
+                        nextPlayer = candidate;
+                        break;
+                    }
+                    nextIdx = (nextIdx + 1) % totalSeats;
+                }
+                
+                let turnText = `当前行动: <b style='color:var(--accent-blue)'>${currentPlayer.name}</b>`;
+                if (nextPlayer && nextPlayer.player_id !== currentPlayer.player_id) {
+                    turnText += ` | 接下来: <b style='color:#94a3b8'>${nextPlayer.name}</b>`;
+                }
+                document.getElementById('turnInfo').innerHTML = turnText;
+            } else {
+                document.getElementById('turnInfo').innerHTML = "本局已结束";
+            }
+
             // 3. 轮次与赢家处理
             let winnerSeats = new Set(), seatResults = {};
             if (pub.street === "HAND_OVER" && pub.history?.length) {
@@ -377,6 +415,31 @@
                 seatDiv.style.left = `${posX}%`; 
                 seatDiv.style.top = `${posY}%`;
                 
+                // 绘制庄位/盲注圆盘 (稍微靠近中心)
+                const markerRx = rx * 0.72;
+                const markerRy = ry * 0.68;
+                const markerX = 50 + markerRx * Math.cos(angle);
+                const markerY = 50 + markerRy * Math.sin(angle);
+
+                if (i === pub.button) {
+                    const m = document.createElement('div');
+                    m.className = 'blind-marker marker-dealer'; m.innerHTML = 'Dealer';
+                    m.style.left = `${markerX}%`; m.style.top = `${markerY}%`;
+                    container.appendChild(m);
+                }
+                if (i === pub.sb_pos) {
+                    const m = document.createElement('div');
+                    m.className = 'blind-marker marker-sb'; m.innerHTML = 'Small<br>Blind';
+                    m.style.left = `${markerX}%`; m.style.top = `${markerY}%`;
+                    container.appendChild(m);
+                }
+                if (i === pub.bb_pos) {
+                    const m = document.createElement('div');
+                    m.className = 'blind-marker marker-bb'; m.innerHTML = 'Big<br>Blind';
+                    m.style.left = `${markerX}%`; m.style.top = `${markerY}%`;
+                    container.appendChild(m);
+                }
+
                 let role = i === pub.button ? 'D' : (i === pub.sb_pos ? 'SB' : (i === pub.bb_pos ? 'BB' : ''));
                 let cards = (i === data.your_seat ? data.your_hole : s.hole) || [];
                 
