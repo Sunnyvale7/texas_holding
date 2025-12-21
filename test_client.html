@@ -144,10 +144,13 @@
         /* 扑克牌样式 */
         .card { 
             width: 40px; height: 60px; background: white; border-radius: 6px;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            display: inline-flex; flex-direction: column; justify-content: center; align-items: center;
             color: #1e293b; font-weight: 900; font-size: 18px;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.3); border: 1px solid #ddd;
             transition: transform 0.3s;
+        }
+        .card.mini {
+            width: 28px; height: 42px; font-size: 12px; border-radius: 4px;
         }
         .card.suit-h, .card.suit-d { color: #ef4444; }
         .card.back { background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); color: white; border: 2px solid white; }
@@ -267,6 +270,15 @@
     <div id="loanModal" class="modal"><div class="modal-content"><h3>破产贷款</h3><p id="loanMessage"></p><button onclick="respondLoan(true)">申请 (上限3次)</button><button class="danger" onclick="respondLoan(false)">离开</button></div></div>
     <div id="seeRequestModal" class="modal"><div class="modal-content"><h3>看牌请求</h3><p id="seeRequestMessage"></p><button onclick="respondSeeRequest(true)">同意 (收下筹码)</button><button class="danger" onclick="respondSeeRequest(false)">拒绝</button></div></div>
     <div id="summaryModal" class="modal"><div class="modal-content"><h2>本场结算</h2><div id="summaryTable"></div><button onclick="location.reload()">返回大厅</button></div></div>
+    <div id="handResultModal" class="modal">
+        <div class="modal-content" style="max-width: 750px; text-align: left;">
+            <h2 style="text-align:center; margin-bottom: 20px;">🎴 本局结算</h2>
+            <div id="handResultTable" style="font-size: 13px;"></div>
+            <div style="text-align:center; margin-top: 20px;">
+                <button onclick="closeHandResult()" style="width: auto; padding: 12px 40px;">确认</button>
+            </div>
+        </div>
+    </div>
     <div id="rulesModal" class="modal" onclick="toggleRules(false)"><div class="modal-content" style="text-align: left;"><h3>牌型大小</h3><p>同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌</p><button onclick="toggleRules(false)">关闭</button></div></div>
 
     <script>
@@ -330,6 +342,13 @@
             const suit = c.slice(-1), val = c.slice(0, -1);
             const suitIcon = { 's': '♠', 'h': '♥', 'd': '♦', 'c': '♣' }[suit];
             return `<div class="card suit-${suit}">${val}<span>${suitIcon}</span></div>`;
+        }
+
+        function formatMiniCard(c) {
+            if (c === "??" || !c) return `<div class="card mini back">?</div>`;
+            const suit = c.slice(-1), val = c.slice(0, -1);
+            const suitIcon = { 's': '♠', 'h': '♥', 'd': '♦', 'c': '♣' }[suit];
+            return `<div class="card mini suit-${suit}">${val}${suitIcon}</div>`;
         }
 
         function updateUI(data) {
@@ -485,9 +504,85 @@
             }
 
             if (pub.history) {
-                document.getElementById('log').innerHTML = pub.history.slice(-20).map(h => `<div>${h.name||'系统'}: ${h.action} ${h.to_amount||''} ${h.extra||''}</div>`).join('');
+                document.getElementById('log').innerHTML = pub.history.slice(-20).map(h => {
+                    let text = `${h.name||'系统'}: ${h.action}`;
+                    if (h.to_amount !== undefined && h.to_amount !== null) text += ` ${h.to_amount}`;
+                    if (h.extra) {
+                        if (typeof h.extra === 'string') text += ` ${h.extra}`;
+                        else if (h.extra.called) text += ` (补${h.extra.called})`;
+                        else if (h.extra.need) text += ` (加注${h.extra.need})`;
+                    }
+                    return `<div>${text}</div>`;
+                }).join('');
                 document.getElementById('log').scrollTop = 9999;
             }
+
+            // 局结束弹窗
+            if (pub.street === "HAND_OVER" && pub.history?.length && !window.handResultShown) {
+                const last = pub.history[pub.history.length - 1];
+                if (["SHOWDOWN", "WIN_NO_SHOWDOWN"].includes(last.action)) {
+                    window.handResultShown = true;
+                    showHandResultModal(last, pub.seats, pub.board);
+                }
+            }
+            if (pub.street !== "HAND_OVER") {
+                window.handResultShown = false;
+            }
+        }
+
+        function showHandResultModal(lastAction, seats, board) {
+            let html = `<div style="margin-bottom: 15px; text-align:center;">
+                <span style="color:#94a3b8">公共牌:</span> 
+                ${board.map(formatMiniCard).join('')}
+            </div>`;
+            html += `<table style="width:100%; border-collapse: collapse;">
+                <tr style="background: rgba(255,255,255,0.1);">
+                    <th style="padding:8px; text-align:left;">玩家</th>
+                    <th style="padding:8px; text-align:center;">状态</th>
+                    <th style="padding:8px; text-align:center;">手牌</th>
+                    <th style="padding:8px; text-align:center;">最佳5张</th>
+                    <th style="padding:8px; text-align:center;">牌型</th>
+                    <th style="padding:8px; text-align:right;">盈亏</th>
+                </tr>`;
+            
+            if (lastAction.results) {
+                lastAction.results.forEach(r => {
+                    const profit = r.won - r.lost;
+                    const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
+                    const status = r.won > 0 ? '🏆' : (r.hand_type === '已弃牌' ? '🃏' : '❌');
+                    const bestCards = r.best_hand?.length ? r.best_hand.map(formatMiniCard).join('') : '-';
+                    html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <td style="padding:8px; font-weight:bold;">${r.name}</td>
+                        <td style="padding:8px; text-align:center;">${status}</td>
+                        <td style="padding:8px; text-align:center;">${r.hole?.length ? r.hole.map(formatMiniCard).join('') : '?'}</td>
+                        <td style="padding:8px; text-align:center;">${bestCards}</td>
+                        <td style="padding:8px; text-align:center; color:#fbbf24; font-size:11px;">${r.hand_type || '-'}</td>
+                        <td style="padding:8px; text-align:right; color:${profitColor}; font-weight:bold;">${profit > 0 ? '+' : ''}${profit}</td>
+                    </tr>`;
+                });
+            } else if (lastAction.winner) {
+                // WIN_NO_SHOWDOWN 情况
+                seats.forEach((s, i) => {
+                    const isWinner = i === lastAction.winner_seat;
+                    const profit = isWinner ? lastAction.pot : -s.contributed_total;
+                    const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
+                    html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <td style="padding:8px; font-weight:bold;">${s.name}</td>
+                        <td style="padding:8px; text-align:center;">${isWinner ? '🏆' : '🃏'}</td>
+                        <td style="padding:8px; text-align:center;">-</td>
+                        <td style="padding:8px; text-align:center;">-</td>
+                        <td style="padding:8px; text-align:center; color:#94a3b8;">未摊牌</td>
+                        <td style="padding:8px; text-align:right; color:${profitColor}; font-weight:bold;">${profit > 0 ? '+' : ''}${profit}</td>
+                    </tr>`;
+                });
+            }
+            html += `</table>`;
+            document.getElementById('handResultTable').innerHTML = html;
+            document.getElementById('handResultModal').style.display = 'flex';
+        }
+
+        function closeHandResult() {
+            document.getElementById('handResultModal').style.display = 'none';
         }
 
         function addMarker(parent, cls, txt, x, y) {

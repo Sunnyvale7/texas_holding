@@ -641,11 +641,15 @@ class HoldemEngine:
         # 1. 预计算每个人的牌力
         ranks = {}
         hand_names = {}
+        best_hands = {}
         for i in alive:
             seven = self.st.seats[i].hole + self.st.board
             v = eval_7(seven)
             ranks[i] = v
             hand_names[i] = HAND_CATEGORIES.get(v[0], "未知")
+            _, best_cards = get_best_hand(seven)
+            best_hands[i] = best_cards
+
 
         # 2. 构建并分配边池
         pots = build_side_pots(self.st.seats)
@@ -696,7 +700,8 @@ class HoldemEngine:
                     "won": won,
                     "lost": s.contributed_total,
                     "hand_type": hand_names.get(i, "已弃牌"),
-                    "hole": [str(c) for c in s.hole] if s.hole else []
+                    "hole": [str(c) for c in s.hole] if s.hole else [],
+                    "best_hand": best_hands.get(i, [])
                 })
 
         # 4. 记录历史
