@@ -483,42 +483,6 @@
             parent.appendChild(m);
         }
 
-            data.legal_actions.forEach(act => {
-                const btn = document.createElement('button');
-                btn.className = `action-btn ${act.type==='ALL_IN'?'danger':''}`;
-                btn.innerText = act.type === 'CALL' ? `CALL(${act.to_amount})` : (act.type==='MUCK'?'MUCK(认输)':act.type);
-                btn.onclick = () => {
-                    if (['RAISE','BET'].includes(act.type)) takeAction(act.type, document.getElementById('raiseAmount').value || act.min_to);
-                    else takeAction(act.type);
-                };
-                controls.appendChild(btn);
-                if (['RAISE','BET'].includes(act.type)) {
-                    raiseBox.style.display = 'block';
-                    document.getElementById('raiseAmount').value = act.min_to;
-                    document.getElementById('raiseHint').innerText = `${act.min_to} - ${act.max_to}`;
-                }
-            });
-
-            if (pub.street === "HAND_OVER") {
-                const nextBtn = document.createElement('button');
-                nextBtn.innerText = "下一局"; nextBtn.onclick = sendReady;
-                controls.appendChild(nextBtn);
-                const myS = pub.seats[data.your_seat];
-                if (myS && !myS.revealed) {
-                    const showBtn = document.createElement('button');
-                    showBtn.innerText = "秀牌"; showBtn.style.background = "#722ed1";
-                    showBtn.onclick = () => ws.send(JSON.stringify({type:"show_cards"}));
-                    controls.appendChild(showBtn);
-                }
-            }
-
-            // 日志
-            if (pub.history) {
-                document.getElementById('log').innerHTML = pub.history.slice(-20).map(h => `<div>${h.name||'系统'}: ${h.action} ${h.to_amount||''} ${h.extra||''}</div>`).join('');
-                document.getElementById('log').scrollTop = 9999;
-            }
-        }
-
         // 辅助函数
         function showModal(id, msg) { document.getElementById(id).style.display = 'flex'; if(msg) document.getElementById(id).querySelector('p').innerText = msg; }
         function showSeeRequestModal(name, amt) { showModal('seeRequestModal', `玩家 ${name} 支付 ${amt} 筹码看牌？`); }
