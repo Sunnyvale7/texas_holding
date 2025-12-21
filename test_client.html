@@ -264,7 +264,7 @@
 
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
             const host = window.location.hostname || "127.0.0.1";
-            const port = window.location.port || (window.location.protocol === 'https:' ? '' : '8000');
+            const port = window.location.port || (window.location.protocol === 'https:' ? '' : '8999');
             const wsUrl = `${protocol}://${host}${port ? ':' + port : ''}/ws/${rid}/${pid}`;
             
             console.log("Connecting to:", wsUrl);
