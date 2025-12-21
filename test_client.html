@@ -516,6 +516,8 @@
             const winnerBanner = document.getElementById('winnerBanner');
             winnerBanner.style.display = 'none';
             let winnerSeats = new Set();
+            let seatResults = {}; // 存储本局每个座位的结算结果
+
             if (pub.street === "HAND_OVER" && pub.history && pub.history.length > 0) {
                 const lastHistory = pub.history[pub.history.length - 1];
                 if (lastHistory.action === "SHOWDOWN" || lastHistory.action === "WIN_NO_SHOWDOWN") {
@@ -523,8 +525,12 @@
                     if (lastHistory.action === "WIN_NO_SHOWDOWN") {
                         winners.push(lastHistory.winner);
                         winnerSeats.add(lastHistory.winner_seat);
-                    } else if (lastHistory.results) {
+                        seatResults[lastHistory.winner_seat] = { won: lastHistory.amount, lost: 0 };
+                    } 
+                    
+                    if (lastHistory.results) {
                         lastHistory.results.forEach(r => {
+                            seatResults[r.seat] = r; // 存储包含 won, lost, hand_type 的结果对象
                             if (r.won > 0) {
                                 winners.push(r.name);
                                 winnerSeats.add(r.seat);
@@ -566,11 +572,20 @@
                 const isToAct = pub.to_act === idx && pub.street !== "HAND_OVER";
                 const isFolded = !s.in_hand;
                 const isWinner = winnerSeats.has(idx);
+                const result = seatResults[idx];
 
                 let seatClasses = "seat";
                 if (isToAct) seatClasses += " active";
                 if (isFolded) seatClasses += " folded";
                 if (isWinner) seatClasses += " winner-highlight";
+
+                let resultHtml = "";
+                if (result) {
+                    const profit = result.won - result.lost;
+                    const color = profit > 0 ? "#52c41a" : (profit < 0 ? "#ff4d4f" : "#888");
+                    const sign = profit > 0 ? "+" : "";
+                    resultHtml = "<div style=\"margin-top:5px; padding-top:5px; border-top:1px dashed #ccc; font-weight:bold; color:" + color + ";\">本局结果: " + sign + profit + "</div>";
+                }
 
                 return `
                     <div class="${seatClasses}">
@@ -588,6 +603,7 @@
                             <span>${s.in_hand ? (s.all_in ? '<b style="color:#f5222d">ALL-IN</b>' : '<b style="color:#52c41a">进行中</b>') : '<b style="color:#bfbfbf">已弃牌</b>'}</span>
                         </div>
                         ${holeHtml}
+                        ${resultHtml}
                     </div>
                 `;
             }).join('');
@@ -608,7 +624,7 @@
                 if (act.type === 'CALL') {
                     const mySeat = pub.seats[data.your_seat];
                     const toCall = pub.current_bet - mySeat.contributed_round;
-                    btn.innerText = `跟注 (需补: ${toCall})`;
+                    btn.innerText = `CALL (Needing to add: ${toCall})`;
                 }
 
                 if (act.type === 'ALL_IN') {
