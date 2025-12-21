@@ -1203,7 +1203,9 @@ rooms: Dict[str, Room] = {}
 
 
 async def send_json(ws: WebSocket, obj: Dict[str, Any]):
-    await ws.send_text(json.dumps(obj, ensure_ascii=False))
+    data = json.dumps(obj, ensure_ascii=False)
+    # print(f"[DEBUG] 发送消息: {data[:100]}...") # 避免日志过长，只打印前100字符
+    await ws.send_text(data)
 
 
 def make_private_state(room: Room, player_id: str) -> Dict[str, Any]:
@@ -1244,6 +1246,7 @@ async def broadcast_room(room: Room):
 @app.websocket("/ws/{room_id}/{player_id}")
 async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
     await ws.accept()
+    print(f"[DEBUG] WebSocket 建立连接: room={room_id}, player={player_id}")
     room = rooms.get(room_id)
     if room is None:
         room = rooms[room_id] = Room(room_id, sb=10, bb=20, seed=random.randint(0, 1000000))
@@ -1254,8 +1257,10 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
     try:
         # wait join message
         raw = await ws.receive_text()
+        print(f"[DEBUG] 收到初始消息 ({player_id}): {raw}")
         msg = json.loads(raw)
         if msg.get("type") != "join":
+            print(f"[DEBUG] 错误: 初始消息不是 join: {msg.get('type')}")
             await send_json(ws, {"type": "error", "message": "First message must be join"})
             return
         name = msg.get("name", player_id)
@@ -1265,14 +1270,18 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
             if player_id not in room.player_seat:
                 try:
                     room.add_player(player_id, name=name, stack=stack)
+                    print(f"[DEBUG] 玩家已加入座位: {name} ({player_id})")
                 except ValueError as e:
+                    print(f"[DEBUG] 加入玩家失败: {e}")
                     await send_json(ws, {"type": "error", "message": str(e)})
                     return
 
+            print(f"[DEBUG] 正在广播房间状态...")
             await broadcast_room(room)
 
         while True:
             raw = await ws.receive_text()
+            print(f"[DEBUG] 收到操作消息 ({player_id}): {raw}")
             msg = json.loads(raw)
 
             async with room.lock:
