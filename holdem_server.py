@@ -699,6 +699,7 @@ class HoldemEngine:
                 s.stack += won
                 s.total_profit += won
                 is_folded = i not in alive
+                best_hand_cards = best_hands.get(i, [])
                 results.append({
                     "seat": i,
                     "name": s.name,
@@ -707,7 +708,7 @@ class HoldemEngine:
                     "folded": is_folded,
                     "hand_type": hand_names.get(i, "已弃牌") if not is_folded else "已弃牌",
                     "hole": [str(c) for c in s.hole] if s.hole else [],
-                    "best_hand": best_hands.get(i, [])
+                    "best_hand": best_hand_cards
                 })
 
         # 4. 记录历史

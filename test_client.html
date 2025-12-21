@@ -21,8 +21,8 @@
             background: var(--bg-dark); 
             color: #e2e8f0;
             display: flex; 
-            justify-content: center; 
-            align-items: center; 
+            justify-content: center;
+            align-items: center;
             min-height: 100vh;
             overflow: hidden;
         }
@@ -239,7 +239,7 @@
                         <div class="pot-visual">
                             <div id="potChips"></div>
                             <span>底池: </span><span id="displayPot">0</span>
-                        </div>
+                </div>
                     </div>
                     <!-- 动态生成的座位 -->
                     <div id="seatsContainer"></div>
@@ -255,7 +255,7 @@
                     <div id="raiseBox" style="margin-top: 15px; display:none;">
                         <input type="number" id="raiseAmount" style="padding: 8px; margin-bottom: 5px;">
                         <div id="raiseHint" style="font-size: 11px; color: #64748b;"></div>
-                    </div>
+        </div>
                 </div>
                 <div class="log-container" id="log"></div>
                 <div style="display: flex; gap: 10px;">
@@ -263,8 +263,8 @@
                     <button class="danger action-btn" onclick="leaveRoom()">退出</button>
                 </div>
             </div>
-        </div>
-    </div>
+                        </div>
+                    </div>
 
     <!-- 弹窗 -->
     <div id="loanModal" class="modal"><div class="modal-content"><h3>破产贷款</h3><p id="loanMessage"></p><button onclick="respondLoan(true)">申请 (上限3次)</button><button class="danger" onclick="respondLoan(false)">离开</button></div></div>
@@ -359,10 +359,10 @@
             // 1. 视图自动切换逻辑
             const isLobby = document.getElementById('lobbyView').classList.contains('active');
             const isGame = document.getElementById('gameView').classList.contains('active');
-            
+
             if (!isLobby) {
                 if (pub.street !== "HAND_OVER") {
-                    if (!isGame) showView('gameView');
+                if (!isGame) showView('gameView');
                 }
             }
 
@@ -552,8 +552,10 @@
                 lastAction.results.forEach(r => {
                     const profit = r.won - r.lost;
                     const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
-                    const isFolded = r.folded || (!r.won && lastAction.action === "WIN_NO_SHOWDOWN");
-                    // 赢家：实际盈利 > 0；弃牌：folded=true；输家：摊牌后输了
+                    // 判断是否弃牌：使用 r.folded 字段，或者在 WIN_NO_SHOWDOWN 时非赢家都是弃牌
+                    const isFolded = (r.folded === true) || (lastAction.action === "WIN_NO_SHOWDOWN" && r.won === 0);
+                    
+                    // 状态判断优先级：赢家 > 弃牌 > 平局 > 输
                     let status;
                     if (profit > 0) {
                         status = '🏆 赢家';
@@ -564,8 +566,9 @@
                     } else {
                         status = '❌ 输';
                     }
-                    const bestCards = r.best_hand?.length ? r.best_hand.map(formatMiniCard).join('') : '-';
-                    const holeCards = r.hole?.length ? r.hole.map(formatMiniCard).join('') : '-';
+                    
+                    const bestCards = (r.best_hand && r.best_hand.length > 0) ? r.best_hand.map(formatMiniCard).join('') : '-';
+                    const holeCards = (r.hole && r.hole.length > 0) ? r.hole.map(formatMiniCard).join('') : '-';
                     const handType = lastAction.action === "WIN_NO_SHOWDOWN" ? "未摊牌" : (r.hand_type || '-');
                     html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <td style="padding:8px; font-weight:bold;">${r.name}</td>
