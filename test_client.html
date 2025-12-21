@@ -467,7 +467,7 @@
             data.legal_actions.forEach(act => {
                 const btn = document.createElement('button');
                 btn.className = `action-btn ${act.type==='ALL_IN'?'danger':''}`;
-                btn.innerText = act.type === 'CALL' ? `跟注(${act.to_amount})` : (act.type==='MUCK'?'认输':act.type);
+                btn.innerText = act.type === 'CALL' ? `CALL(${act.to_amount})` : (act.type==='MUCK'?'MUCK(认输)':act.type);
                 btn.onclick = () => {
                     if (['RAISE','BET'].includes(act.type)) takeAction(act.type, document.getElementById('raiseAmount').value || act.min_to);
                     else takeAction(act.type);
