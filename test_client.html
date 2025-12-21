@@ -272,11 +272,15 @@
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
-                console.log("[DEBUG] WebSocket 已连接, 发送 join 消息:", joinMsg);
-                ws.send(joinMsg);
                 showView('setupView');
                 document.getElementById('setupTitle').innerText = `房间: ${rid}`;
+                
+                // 延迟发送 join，给网络缓冲区一点时间就绪
+                setTimeout(() => {
+                    const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
+                    console.log("[DEBUG] WebSocket 已连接, 发送 join 消息:", joinMsg);
+                    ws.send(joinMsg);
+                }, 200);
             };
 
             ws.onmessage = (event) => {
