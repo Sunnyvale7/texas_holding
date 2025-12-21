@@ -72,8 +72,8 @@
         }
 
         .poker-table-wrapper {
-            position: relative; flex: 1; display: flex; justify-content: center; align-items: center;
-            margin: 40px 0;
+            position: relative; flex: 1; display: flex; justify-content: flex-start; align-items: center;
+            margin: 40px 0; padding-left: 5%; /* 向左偏移 */
         }
 
         .poker-table {
@@ -440,13 +440,12 @@
                     container.appendChild(m);
                 }
 
-                let role = i === pub.button ? 'D' : (i === pub.sb_pos ? 'SB' : (i === pub.bb_pos ? 'BB' : ''));
                 let cards = (i === data.your_seat ? data.your_hole : s.hole) || [];
                 
                 seatDiv.innerHTML = `
                     <div class="player-info">
-                        <span class="player-name">${s.name} ${role?`[${role}]`:''}</span>
-                        <span class="player-stack">💰${s.stack}</span>
+                        <span class="player-name">${s.name}</span>
+                        <div class="player-stack">${renderChips(s.stack)}</div>
                     </div>
                     <div style="display:flex; gap:4px; justify-content:center; margin:5px 0;">${cards.map(formatCard).join('')}</div>
                     <div class="chip-container">投: ${renderChips(s.contributed_round, true)}</div>
