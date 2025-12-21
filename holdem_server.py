@@ -815,9 +815,18 @@ class BaseAgent:
     def act(self, state: Dict[str, Any]) -> Action:
         raise NotImplementedError
 
+    def decide_show_cards(self, state: Dict[str, Any]) -> bool:
+        """决定是否在局后主动秀牌"""
+        return False
+
+    def decide_see_request(self, state: Dict[str, Any], amount: int) -> bool:
+        """决定是否接受玩家的买牌请求"""
+        return False
+
 class SimpleAgent(BaseAgent):
     """简单机器人：基于固定概率分布，比较随意，且容易上头"""
     def act(self, state: Dict[str, Any]) -> Action:
+        # ... (保持原逻辑)
         legal_actions = state["legal_actions"]
         if not legal_actions: return Action(ActType.FOLD)
         acts = {a["type"]: a for a in legal_actions}
@@ -844,9 +853,16 @@ class SimpleAgent(BaseAgent):
             return Action(ActType.FOLD)
         return Action(ActType.FOLD)
 
+    def decide_show_cards(self, state: Dict[str, Any]) -> bool:
+        return random.random() < 0.30 # 30% 概率乱秀
+
+    def decide_see_request(self, state: Dict[str, Any], amount: int) -> bool:
+        return amount >= 50 # 给点钱就看
+
 class MediumAgent(BaseAgent):
     """中等机器人：基于胜率评估，相对理性，具备基础的诈唬能力"""
     def act(self, state: Dict[str, Any]) -> Action:
+        # ... (保持原逻辑)
         legal_actions = state["legal_actions"]
         if not legal_actions: return Action(ActType.FOLD)
         acts = {a["type"]: a for a in legal_actions}
@@ -896,6 +912,24 @@ class MediumAgent(BaseAgent):
         else:
             if check_act: return Action(ActType.CHECK)
             return Action(ActType.FOLD)
+
+    def decide_show_cards(self, state: Dict[str, Any]) -> bool:
+        return random.random() < 0.10 # 10% 概率秀一下
+
+    def decide_see_request(self, state: Dict[str, Any], amount: int) -> bool:
+        # 获取本局赢钱数
+        won = 0
+        history = state["public"]["history"]
+        if history:
+            last = history[-1]
+            if last["action"] in ["SHOWDOWN", "WIN_NO_SHOWDOWN"]:
+                for r in last.get("results", []):
+                    if r["seat"] == state["your_seat"]:
+                        won = r["won"]
+        if won <= 0: return amount >= 50 # 没赢钱，给 50 就看
+        ratio = amount / won
+        # 赢钱比例越高，接受看牌请求的概率越高（因为心情好或金额诱人）
+        return random.random() < (0.2 + ratio * 2.0)
 
 # ----------------------------
 # RL Architecture
@@ -1006,6 +1040,22 @@ class RLAgent(BaseAgent):
         
         # 兜底：如果模型未加载或报错，使用中级机器人逻辑
         return MediumAgent(self.name).act(state)
+
+    def decide_show_cards(self, state: Dict[str, Any]) -> bool:
+        # 基于策略：翻牌后胜率很低（诈唬成功）或胜率极高（震慑）时倾向于秀牌
+        hole = [Card.from_str(c) for c in state["your_hole"]]
+        board = [Card.from_str(c) for c in state["public"]["board"]]
+        if len(board) < 3: return random.random() < 0.1 # 翻牌前少秀
+        
+        opponents = max(1, sum(1 for s in state["public"]["seats"] if s["in_hand"] and s["player_id"] != state["player_id"]))
+        win_rate = estimate_win_rate(hole, board, opponents, iterations=200)
+        
+        if win_rate < 0.2: return random.random() < 0.25 # 成功的诈唬，秀一下心理战
+        if win_rate > 0.8: return random.random() < 0.20 # 绝对实力，震慑
+        return random.random() < 0.05
+
+    def decide_see_request(self, state: Dict[str, Any], amount: int) -> bool:
+        return MediumAgent(self.name).decide_see_request(state, amount)
 
 class Room:
     def __init__(self, room_id: str, sb: int = 10, bb: int = 20, seed: int = 42):
@@ -1210,6 +1260,23 @@ class Room:
             try:
                 self.engine.apply_action(seat_i, action)
                 if self.state.street == Street.HAND_OVER:
+                    # AI 局后逻辑：是否秀牌
+                    for pid, agent in self.ai_agents.items():
+                        s_idx = self.player_seat.get(pid)
+                        if s_idx is not None:
+                            seat = self.state.seats[s_idx]
+                            # 如果没秀过，且不是由于摊牌而已经公开的
+                            if not seat.revealed and not (self.state.showdown_occurred and seat.in_hand):
+                                p_state = make_private_state(self, pid)
+                                if agent.decide_show_cards(p_state):
+                                    seat.revealed = True
+                                    self.state.action_history.append({
+                                        "street": self.state.street.value,
+                                        "action": "SYSTEM",
+                                        "name": "系统",
+                                        "extra": f"机器人 {seat.name} 决定展示其底牌以震慑对手！"
+                                    })
+                                    
                     await self.handle_broke_players()
                     self.rotate_button()
                 # 行动后广播新状态
@@ -1440,26 +1507,56 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
                     target_id = msg.get("target_id")
                     amount = int(msg.get("amount", 0))
                     if target_id and target_id in room.player_seat and target_id != player_id:
-                        # 记录请求
-                        room.see_requests[target_id] = {"requester_id": player_id, "amount": amount}
-                        # 通知目标玩家
-                        target_ws = room.connections.get(target_id)
-                        if target_ws:
-                            requester_name = room.state.seats[room.player_seat[player_id]].name
-                            await send_json(target_ws, {
-                                "type": "see_request",
-                                "requester_id": player_id,
-                                "requester_name": requester_name,
-                                "amount": amount
+                        # 如果目标是机器人，直接进入决策逻辑
+                        if target_id in room.ai_agents:
+                            agent = room.ai_agents[target_id]
+                            p_state = make_private_state(room, target_id)
+                            accept = agent.decide_see_request(p_state, amount)
+                            
+                            if accept:
+                                target_idx = room.player_seat[target_id]
+                                requester_idx = room.player_seat.get(player_id)
+                                if requester_idx is not None:
+                                    # 转账
+                                    actual_amt = min(amount, room.state.seats[requester_idx].stack)
+                                    room.state.seats[requester_idx].stack -= actual_amt
+                                    room.state.seats[requester_idx].total_profit -= actual_amt
+                                    room.state.seats[target_idx].stack += actual_amt
+                                    room.state.seats[target_idx].total_profit += actual_amt
+                                    room.state.seats[target_idx].revealed = True
+                                    room.state.action_history.append({
+                                        "street": room.state.street.value,
+                                        "action": "SYSTEM",
+                                        "name": "系统",
+                                        "extra": f"成交！机器人 {room.state.seats[target_idx].name} 收下钱展示了底牌"
+                                    })
+                            else:
+                                room.state.action_history.append({
+                                    "street": room.state.street.value,
+                                    "action": "SYSTEM",
+                                    "name": "系统",
+                                    "extra": f"机器人 {room.state.seats[room.player_seat[target_id]].name} 拒绝了看牌请求"
+                                })
+                            await broadcast_room(room)
+                        else:
+                            # 如果目标是真人，走原有的请求通知逻辑
+                            room.see_requests[target_id] = {"requester_id": player_id, "amount": amount}
+                            target_ws = room.connections.get(target_id)
+                            if target_ws:
+                                requester_name = room.state.seats[room.player_seat[player_id]].name
+                                await send_json(target_ws, {
+                                    "type": "see_request",
+                                    "requester_id": player_id,
+                                    "requester_name": requester_name,
+                                    "amount": amount
+                                })
+                            room.state.action_history.append({
+                                "street": room.state.street.value,
+                                "action": "SYSTEM",
+                                "name": "系统",
+                                "extra": f"玩家 {room.state.seats[room.player_seat[player_id]].name} 想花 {amount} 筹码看一眼 {room.state.seats[room.player_seat[target_id]].name} 的牌"
                             })
-                        # 日志
-                        room.state.action_history.append({
-                            "street": room.state.street.value,
-                            "action": "SYSTEM",
-                            "name": "系统",
-                            "extra": f"玩家 {room.state.seats[room.player_seat[player_id]].name} 想花 {amount} 筹码看一眼 {room.state.seats[room.player_seat[target_id]].name} 的牌"
-                        })
-                        await broadcast_room(room)
+                            await broadcast_room(room)
 
                 elif t == "respond_see_request":
                     accept = msg.get("accept", False)

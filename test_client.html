@@ -638,7 +638,7 @@
                         <div style="display:flex; justify-content:space-between">
                             <strong>${s.name} <span style="color:#1890ff">${role}</span></strong>
                             <div style="display: flex; align-items: center; gap: 5px;">
-                                ${pub.street === 'HAND_OVER' && idx !== data.your_seat && !s.revealed && s.in_hand ? `<button style="padding: 2px 6px; font-size: 10px; background: #fa8c16;" onclick="requestSee('${s.player_id}')">想看牌</button>` : ''}
+                                ${pub.street === 'HAND_OVER' && idx !== data.your_seat && s.in_hand && (!s.hole || s.hole[0] === "??") && !s.revealed ? `<button style="padding: 2px 6px; font-size: 10px; background: #fa8c16;" onclick="requestSee('${s.player_id}')">想看牌</button>` : ''}
                                 <span style="font-size:12px; color:${s.total_profit >= 0 ? '#52c41a' : '#ff4d4f'}; margin-right:5px;">
                                     ${s.total_profit >= 0 ? '+' : ''}${s.total_profit}
                                 </span>
