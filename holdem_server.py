@@ -558,7 +558,9 @@ class HoldemEngine:
             
             results = []
             for i, s in enumerate(self.st.seats):
-                if s.contributed_total > 0:
+                # 只要有底牌（参与过本局）或有投入，就要出现在统计中
+                has_hole = s.hole and len(s.hole) > 0
+                if s.contributed_total > 0 or has_hole:
                     results.append({
                         "seat": i,
                         "name": s.name,
@@ -690,9 +692,10 @@ class HoldemEngine:
         # 3. 统计并更新所有玩家的筹码和利润
         results = []
         for i, s in enumerate(self.st.seats):
-            # 只要在本局有投入，或者赢了钱，就要出现在统计中
+            # 只要有底牌（参与过本局）、有投入、或者赢了钱，就要出现在统计中
             won = won_amounts.get(i, 0)
-            if s.contributed_total > 0 or won > 0:
+            has_hole = s.hole and len(s.hole) > 0
+            if s.contributed_total > 0 or won > 0 or has_hole:
                 s.stack += won
                 s.total_profit += won
                 is_folded = i not in alive

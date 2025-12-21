@@ -553,7 +553,17 @@
                     const profit = r.won - r.lost;
                     const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
                     const isFolded = r.folded || (!r.won && lastAction.action === "WIN_NO_SHOWDOWN");
-                    const status = r.won > 0 ? '🏆 赢家' : (isFolded ? '🃏 弃牌' : '❌ 输');
+                    // 赢家：实际盈利 > 0；弃牌：folded=true；输家：摊牌后输了
+                    let status;
+                    if (profit > 0) {
+                        status = '🏆 赢家';
+                    } else if (isFolded) {
+                        status = '🃏 弃牌';
+                    } else if (profit === 0) {
+                        status = '🤝 平局';
+                    } else {
+                        status = '❌ 输';
+                    }
                     const bestCards = r.best_hand?.length ? r.best_hand.map(formatMiniCard).join('') : '-';
                     const holeCards = r.hole?.length ? r.hole.map(formatMiniCard).join('') : '-';
                     const handType = lastAction.action === "WIN_NO_SHOWDOWN" ? "未摊牌" : (r.hand_type || '-');
