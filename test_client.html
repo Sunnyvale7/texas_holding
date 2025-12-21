@@ -272,22 +272,23 @@
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
+                console.log("[DEBUG] WebSocket 已连接，等待服务器握手确认...");
                 showView('setupView');
                 document.getElementById('setupTitle').innerText = `房间: ${rid}`;
-                
-                // 延迟发送 join，确保通道完全就绪
-                setTimeout(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
-                        console.log("[DEBUG] 发送 join 消息:", joinMsg);
-                        ws.send(joinMsg);
-                    }
-                }, 300);
             };
 
             ws.onmessage = (event) => {
                 console.log("[DEBUG] 收到服务器消息:", event.data.substring(0, 100) + "...");
                 const data = JSON.parse(event.data);
+                
+                // 收到服务器的握手确认后，发送 join
+                if (data.type === "handshake" && data.status === "ready") {
+                    const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
+                    console.log("[DEBUG] 收到握手确认，发送 join:", joinMsg);
+                    ws.send(joinMsg);
+                    return;
+                }
+                
                 if (data.type === "state") {
                     if (data.public) {
                         updateUI(data);

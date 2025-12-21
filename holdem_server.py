@@ -1249,6 +1249,11 @@ async def broadcast_room(room: Room):
 @app.websocket("/ws/{room_id}/{player_id}")
 async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
     await ws.accept()
+    
+    # 服务器主动发送握手确认，激活双向通道
+    await ws.send_text(json.dumps({"type": "handshake", "status": "ready"}))
+    print(f"[DEBUG] 已发送握手确认给 {player_id}")
+    
     room = rooms.get(room_id)
     if room is None:
         room = rooms[room_id] = Room(room_id, sb=10, bb=20, seed=random.randint(0, 1000000))
@@ -1257,7 +1262,7 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
         room.connections[player_id] = ws
 
     try:
-        # 恢复正常的接收逻辑
+        # 等待客户端的 join 消息
         raw = await ws.receive_text()
         print(f"[DEBUG] 收到初始消息 ({player_id}): {raw}")
         msg = json.loads(raw)
