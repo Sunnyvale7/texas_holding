@@ -420,7 +420,16 @@
                 seatDiv.className = `seat ${isToAct?'active':''} ${!s.in_hand?'folded':''} ${winnerSeats.has(i)?'winner-highlight':''}`;
                 seatDiv.style.left = `${posX}%`; seatDiv.style.top = `${posY}%`;
                 
-                // 绘制圆盘标记 (直接附加在 seatDiv 上)
+                let cards = (i === myIdx ? data.your_hole : s.hole) || [];
+                seatDiv.innerHTML = `
+                    <div class="player-info"><span class="player-name">${s.name}</span><div class="player-stack">${renderChips(s.stack)}</div></div>
+                    <div style="display:flex; gap:4px; justify-content:center; margin:5px 0;">${cards.map(formatCard).join('')}</div>
+                    <div class="chip-container">投: ${renderChips(s.contributed_round, true)}</div>
+                    ${res ? `<div style="color:${res.won-res.lost>0?'#4ade80':'#f87171'};font-size:11px;font-weight:bold;margin-top:4px">本局: ${res.won-res.lost>0?'+':''}${res.won-res.lost}</div>`:''}
+                    ${pub.street === 'HAND_OVER' && i !== myIdx && s.in_hand && (!s.hole || s.hole[0]==="??") && !s.revealed ? `<button onclick="requestSee('${s.player_id}')" style="padding:2px;font-size:10px;margin-top:5px">买牌</button>` : ''}
+                `;
+
+                // 绘制圆盘标记 (在 innerHTML 之后追加，防止被覆盖)
                 if (i === pub.button) {
                     const m = document.createElement('div');
                     m.className = 'blind-marker marker-dealer'; m.innerHTML = 'D';
@@ -437,14 +446,6 @@
                     seatDiv.appendChild(m);
                 }
 
-                let cards = (i === myIdx ? data.your_hole : s.hole) || [];
-                seatDiv.innerHTML = `
-                    <div class="player-info"><span class="player-name">${s.name}</span><div class="player-stack">${renderChips(s.stack)}</div></div>
-                    <div style="display:flex; gap:4px; justify-content:center; margin:5px 0;">${cards.map(formatCard).join('')}</div>
-                    <div class="chip-container">投: ${renderChips(s.contributed_round, true)}</div>
-                    ${res ? `<div style="color:${res.won-res.lost>0?'#4ade80':'#f87171'};font-size:11px;font-weight:bold;margin-top:4px">本局: ${res.won-res.lost>0?'+':''}${res.won-res.lost}</div>`:''}
-                    ${pub.street === 'HAND_OVER' && i !== myIdx && s.in_hand && (!s.hole || s.hole[0]==="??") && !s.revealed ? `<button onclick="requestSee('${s.player_id}')" style="padding:2px;font-size:10px;margin-top:5px">买牌</button>` : ''}
-                `;
                 container.appendChild(seatDiv);
             });
 
