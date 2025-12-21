@@ -631,9 +631,14 @@ class HoldemEngine:
 
     def _showdown(self):
         self.st.showdown_occurred = True
+        # 获取所有未弃牌的玩家索引
         alive = self.st.alive_indices()
-        # build side pots
-        pots = build_side_pots(self.st.seats)
+        if not alive:
+            self.st.street = Street.HAND_OVER
+            self.st.to_act = None
+            return
+
+        # 1. 预计算每个人的牌力
         ranks = {}
         hand_names = {}
         for i in alive:
@@ -642,50 +647,59 @@ class HoldemEngine:
             ranks[i] = v
             hand_names[i] = HAND_CATEGORIES.get(v[0], "未知")
 
-        payouts = []
+        # 2. 构建并分配边池
+        pots = build_side_pots(self.st.seats)
         won_amounts = {i: 0 for i in range(len(self.st.seats))}
-        
-        for pot_amount, eligible in pots:
-            elig_alive = [i for i in eligible if self.st.seats[i].in_hand]
-            if not elig_alive:
+        payout_details = []
+
+        for pot_amount, eligible_indices in pots:
+            # 只有还没弃牌的人才能赢取该池子
+            winners_in_pot = [i for i in eligible_indices if i in alive]
+            if not winners_in_pot:
+                # 理论上不该发生，如果该池子没人能赢，给最后一名投入者
                 continue
-            best = max(ranks[i] for i in elig_alive)
-            winners = [i for i in elig_alive if ranks[i] == best]
+            
+            # 找出该池子中牌力最强的人
+            best_rank = max(ranks[i] for i in winners_in_pot)
+            winners = [i for i in winners_in_pot if ranks[i] == best_rank]
+            
+            # 平分池子
             share = pot_amount // len(winners)
             rem = pot_amount % len(winners)
             for w in winners:
-                self.st.seats[w].stack += share
-                self.st.seats[w].total_profit += share
                 won_amounts[w] += share
-            # remainder: give to winners starting from left of button
+            
+            # 处理余数：按座位顺序（从庄家左手边开始）分配给赢家
             if rem:
                 order = list(iter_seats_from(next_seat(self.st.button, len(self.st.seats)), len(self.st.seats)))
                 ordered_winners = [i for i in order if i in winners]
                 for k in range(rem):
                     win_idx = ordered_winners[k % len(ordered_winners)]
-                    self.st.seats[win_idx].stack += 1
-                    self.st.seats[win_idx].total_profit += 1
                     won_amounts[win_idx] += 1
 
-            payouts.append({
+            payout_details.append({
                 "pot": pot_amount,
-                "eligible": elig_alive,
-                "winners": winners,
+                "winners": winners
             })
 
-        # Calculate profit/loss for everyone
+        # 3. 统计并更新所有玩家的筹码和利润
         results = []
         for i, s in enumerate(self.st.seats):
-            if s.contributed_total > 0:
+            # 只要在本局有投入，或者赢了钱，就要出现在统计中
+            won = won_amounts.get(i, 0)
+            if s.contributed_total > 0 or won > 0:
+                s.stack += won
+                s.total_profit += won
                 results.append({
                     "seat": i,
                     "name": s.name,
-                    "won": won_amounts.get(i, 0),
+                    "won": won,
                     "lost": s.contributed_total,
-                    "hand_type": hand_names.get(i, "弃牌"),
+                    "hand_type": hand_names.get(i, "已弃牌"),
                     "hole": [str(c) for c in s.hole] if s.hole else []
                 })
 
+        # 4. 记录历史
         self.st.action_history.append({
             "street": self.st.street.value,
             "action": "SHOWDOWN",
