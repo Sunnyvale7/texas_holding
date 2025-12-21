@@ -281,10 +281,16 @@
 
             ws.onmessage = (event) => {
                 console.log("[DEBUG] 收到服务器消息:", event.data.substring(0, 100) + "...");
-                const data = JSON.parse(event.data);
-                if (data.type === "state") {
-                    updateUI(data);
-                } else if (data.type === "loan_request") {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "state") {
+                        // 只有当存在 public 字段时才更新 UI
+                        if (data.public) {
+                            updateUI(data);
+                        } else {
+                            console.log("[DEBUG] 收到非 UI 状态消息:", data);
+                        }
+                    } else if (data.type === "loan_request") {
                     showLoanModal(data.message);
                 } else if (data.type === "game_summary") {
                     showSummaryModal(data.summary);

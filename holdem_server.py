@@ -1249,16 +1249,6 @@ async def broadcast_room(room: Room):
 @app.websocket("/ws/{room_id}/{player_id}")
 async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
     await ws.accept()
-    print(f"[DEBUG] WebSocket 握手成功: room={room_id}, player={player_id}")
-    
-    # --- 新增主动探测 ---
-    try:
-        await send_json(ws, {"type": "state", "message": "SERVER_HANDSHAKE_OK"})
-        print(f"[DEBUG] 已发送握手确认包给 {player_id}")
-    except Exception as e:
-        print(f"[DEBUG] 发送确认包失败: {e}")
-    # ------------------
-
     room = rooms.get(room_id)
     if room is None:
         room = rooms[room_id] = Room(room_id, sb=10, bb=20, seed=random.randint(0, 1000000))
@@ -1267,22 +1257,30 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
         room.connections[player_id] = ws
 
     try:
-        # 使用更底层的 receive() 观察原始消息
-        message = await ws.receive()
-        print(f"[DEBUG] 收到原始消息类型 ({player_id}): {message.get('type')}")
-        
-        if message.get("type") == "websocket.receive":
-            raw = message.get("text")
-            print(f"[DEBUG] 收到文本内容: {raw}")
-            msg = json.loads(raw)
-        else:
-            print(f"[DEBUG] 收到非预期消息类型: {message}")
-            return
-
+        # 恢复正常的接收逻辑
+        raw = await ws.receive_text()
+        print(f"[DEBUG] 收到初始消息 ({player_id}): {raw}")
+        msg = json.loads(raw)
         if msg.get("type") != "join":
-            print(f"[DEBUG] 错误: 初始消息不是 join")
             await send_json(ws, {"type": "error", "message": "First message must be join"})
             return
+        name = msg.get("name", player_id)
+        stack = int(msg.get("stack", 2000))
+
+        async with room.lock:
+            if player_id not in room.player_seat:
+                try:
+                    room.add_player(player_id, name=name, stack=stack)
+                    print(f"[DEBUG] 玩家 {name} 加入成功")
+                except ValueError as e:
+                    await send_json(ws, {"type": "error", "message": str(e)})
+                    return
+
+            await broadcast_room(room)
+
+        while True:
+            raw = await ws.receive_text()
+            msg = json.loads(raw)
         name = msg.get("name", player_id)
         stack = int(msg.get("stack", 2000))
 
