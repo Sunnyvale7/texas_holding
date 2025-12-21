@@ -264,7 +264,8 @@
 
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
             const host = window.location.hostname || "127.0.0.1";
-            const port = window.location.port || (window.location.protocol === 'https:' ? '' : '8999');
+            // 修复逻辑：优先使用当前页面的端口
+            const port = window.location.port; 
             const wsUrl = `${protocol}://${host}${port ? ':' + port : ''}/ws/${rid}/${pid}`;
             
             console.log("Connecting to:", wsUrl);
