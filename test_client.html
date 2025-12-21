@@ -333,6 +333,8 @@
 
         function updateUI(data) {
             const pub = data.public;
+            const totalSeats = pub.seats.length || 1;
+            const myIdx = (data.your_seat !== undefined && data.your_seat !== null) ? data.your_seat : 0;
             
             // 1. 视图自动切换逻辑
             const isLobby = document.getElementById('lobbyView').classList.contains('active');
@@ -341,8 +343,6 @@
             if (!isLobby) {
                 if (pub.street !== "HAND_OVER") {
                     if (!isGame) showView('gameView');
-                } else {
-                    // 如果在游戏中结束，不跳走，保持看结果；如果在设置页，保持在设置页
                 }
             }
 
@@ -355,37 +355,39 @@
                 </div>
             `).join('');
 
-            // 2. 牌桌更新
+            // 3. 牌桌更新
             document.getElementById('displayStreet').innerText = pub.street;
             document.getElementById('displayPot').innerText = pub.pot_total;
             document.getElementById('potChips').innerHTML = renderChips(pub.pot_total);
             document.getElementById('board').innerHTML = pub.board.map(formatCard).join('');
             document.getElementById('activePlayers').innerText = `在场: ${pub.seats.filter(s=>s.in_hand).length}人`;
 
-            // 轮次信息
+            // 4. 轮次信息
             if (pub.street !== "HAND_OVER") {
                 const currentPlayer = pub.seats[pub.to_act];
-                let nextIdx = (pub.to_act + 1) % totalSeats;
-                let nextPlayer = null;
-                for (let j = 0; j < totalSeats; j++) {
-                    const candidate = pub.seats[nextIdx];
-                    if (candidate.in_hand && !candidate.all_in) {
-                        nextPlayer = candidate;
-                        break;
+                if (currentPlayer) {
+                    let nextIdx = (pub.to_act + 1) % totalSeats;
+                    let nextPlayer = null;
+                    for (let j = 0; j < totalSeats; j++) {
+                        const candidate = pub.seats[nextIdx];
+                        if (candidate && candidate.in_hand && !candidate.all_in) {
+                            nextPlayer = candidate;
+                            break;
+                        }
+                        nextIdx = (nextIdx + 1) % totalSeats;
                     }
-                    nextIdx = (nextIdx + 1) % totalSeats;
+                    
+                    let turnText = `当前行动: <b style='color:var(--accent-blue)'>${currentPlayer.name}</b>`;
+                    if (nextPlayer && nextPlayer.player_id !== currentPlayer.name) {
+                        turnText += ` | 接下来: <b style='color:#94a3b8'>${nextPlayer.name}</b>`;
+                    }
+                    document.getElementById('turnInfo').innerHTML = turnText;
                 }
-                
-                let turnText = `当前行动: <b style='color:var(--accent-blue)'>${currentPlayer.name}</b>`;
-                if (nextPlayer && nextPlayer.player_id !== currentPlayer.player_id) {
-                    turnText += ` | 接下来: <b style='color:#94a3b8'>${nextPlayer.name}</b>`;
-                }
-                document.getElementById('turnInfo').innerHTML = turnText;
             } else {
                 document.getElementById('turnInfo').innerHTML = "本局已结束";
             }
 
-            // 3. 轮次与赢家处理
+            // 5. 赢家处理
             let winnerSeats = new Set(), seatResults = {};
             if (pub.street === "HAND_OVER" && pub.history?.length) {
                 const last = pub.history[pub.history.length-1];
@@ -398,23 +400,15 @@
                 }
             } else { document.getElementById('winnerBanner').style.display = 'none'; }
 
-            // 4. 座位分布 (动态计算椭圆坐标)
+            // 6. 座位分布 (动态计算椭圆坐标)
             const container = document.getElementById('seatsContainer');
             container.innerHTML = "";
-            const myIdx = data.your_seat || 0;
-            const totalSeats = pub.seats.length;
 
             pub.seats.forEach((s, i) => {
-                // 以玩家自己为底部中心 (PI/2 弧度)，计算均匀分布的角度
                 const relativeIdx = (i - myIdx + totalSeats) % totalSeats;
-                
-                // 角度计算：PI/2 是正下方，顺时针增加角度
                 const angle = (Math.PI / 2) + (relativeIdx / totalSeats) * (Math.PI * 2);
                 
-                // 椭圆方程坐标：rx 是横向半径，ry 是纵向半径 (百分比)
-                // 增加半径使得方框更靠边缘
-                const rx = 48; 
-                const ry = 45;
+                const rx = 48, ry = 45;
                 const posX = 50 + rx * Math.cos(angle);
                 const posY = 50 + ry * Math.sin(angle);
 
@@ -423,62 +417,71 @@
                 
                 const seatDiv = document.createElement('div');
                 seatDiv.className = `seat ${isToAct?'active':''} ${!s.in_hand?'folded':''} ${winnerSeats.has(i)?'winner-highlight':''}`;
-                seatDiv.style.left = `${posX}%`; 
-                seatDiv.style.top = `${posY}%`;
+                seatDiv.style.left = `${posX}%`; seatDiv.style.top = `${posY}%`;
                 
-                // 绘制庄位/盲注圆盘 (稍微靠近中心)
-                const markerRx = rx * 0.72;
-                const markerRy = ry * 0.68;
-                const markerX = 50 + markerRx * Math.cos(angle);
-                const markerY = 50 + markerRy * Math.sin(angle);
+                // 绘制圆盘
+                const mRx = rx * 0.72, mRy = ry * 0.68;
+                const mX = 50 + mRx * Math.cos(angle), mY = 50 + mRy * Math.sin(angle);
 
-                if (i === pub.button) {
-                    const m = document.createElement('div');
-                    m.className = 'blind-marker marker-dealer'; m.innerHTML = 'Dealer';
-                    m.style.left = `${markerX}%`; m.style.top = `${markerY}%`;
-                    container.appendChild(m);
-                }
-                if (i === pub.sb_pos) {
-                    const m = document.createElement('div');
-                    m.className = 'blind-marker marker-sb'; m.innerHTML = 'Small<br>Blind';
-                    m.style.left = `${markerX}%`; m.style.top = `${markerY}%`;
-                    container.appendChild(m);
-                }
-                if (i === pub.bb_pos) {
-                    const m = document.createElement('div');
-                    m.className = 'blind-marker marker-bb'; m.innerHTML = 'Big<br>Blind';
-                    m.style.left = `${markerX}%`; m.style.top = `${markerY}%`;
-                    container.appendChild(m);
-                }
+                if (i === pub.button) addMarker(container, 'marker-dealer', 'Dealer', mX, mY);
+                if (i === pub.sb_pos) addMarker(container, 'marker-sb', 'Small<br>Blind', mX, mY);
+                if (i === pub.bb_pos) addMarker(container, 'marker-bb', 'Big<br>Blind', mX, mY);
 
-                let cards = (i === data.your_seat ? data.your_hole : s.hole) || [];
-                
+                let cards = (i === myIdx ? data.your_hole : s.hole) || [];
                 seatDiv.innerHTML = `
-                    <div class="player-info">
-                        <span class="player-name">${s.name}</span>
-                        <div class="player-stack">${renderChips(s.stack)}</div>
-                    </div>
+                    <div class="player-info"><span class="player-name">${s.name}</span><div class="player-stack">${renderChips(s.stack)}</div></div>
                     <div style="display:flex; gap:4px; justify-content:center; margin:5px 0;">${cards.map(formatCard).join('')}</div>
                     <div class="chip-container">投: ${renderChips(s.contributed_round, true)}</div>
-                    ${res ? `<div style="color:${res.won-res.lost>0?'#4ade80':'#f87171'};font-size:11px;font-weight:bold;margin-top:4px">
-                        本局: ${res.won-res.lost>0?'+':''}${res.won-res.lost}
-                    </div>`:''}
-                    ${pub.street === 'HAND_OVER' && i !== data.your_seat && s.in_hand && (!s.hole || s.hole[0]==="??") && !s.revealed ? 
-                        `<button onclick="requestSee('${s.player_id}')" style="padding:2px;font-size:10px;margin-top:5px">买牌</button>` : ''}
+                    ${res ? `<div style="color:${res.won-res.lost>0?'#4ade80':'#f87171'};font-size:11px;font-weight:bold;margin-top:4px">本局: ${res.won-res.lost>0?'+':''}${res.won-res.lost}</div>`:''}
+                    ${pub.street === 'HAND_OVER' && i !== myIdx && s.in_hand && (!s.hole || s.hole[0]==="??") && !s.revealed ? `<button onclick="requestSee('${s.player_id}')" style="padding:2px;font-size:10px;margin-top:5px">买牌</button>` : ''}
                 `;
                 container.appendChild(seatDiv);
             });
 
-            // 5. 控制面板更新 (确保即便在 HAND_OVER 也能看到最后的手牌)
+            // 7. 控制面板更新
             const controls = document.getElementById('actionControls');
             const raiseBox = document.getElementById('raiseBox');
             controls.innerHTML = ""; raiseBox.style.display = 'none';
-            
-            if (data.your_hole && data.your_hole.length > 0) {
-                document.getElementById('myHole').innerHTML = data.your_hole.map(formatCard).join('');
-            } else {
-                document.getElementById('myHole').innerHTML = "";
+            document.getElementById('myHole').innerHTML = (data.your_hole || []).map(formatCard).join('');
+
+            data.legal_actions.forEach(act => {
+                const btn = document.createElement('button');
+                btn.className = `action-btn ${act.type==='ALL_IN'?'danger':''}`;
+                btn.innerText = act.type === 'CALL' ? `CALL(${act.to_amount})` : (act.type==='MUCK'?'MUCK(认输)':act.type);
+                btn.onclick = () => takeAction(act.type, document.getElementById('raiseAmount').value || act.min_to);
+                controls.appendChild(btn);
+                if (['RAISE','BET'].includes(act.type)) {
+                    raiseBox.style.display = 'block';
+                    document.getElementById('raiseAmount').value = act.min_to;
+                    document.getElementById('raiseHint').innerText = `${act.min_to} - ${act.max_to}`;
+                }
+            });
+
+            if (pub.street === "HAND_OVER") {
+                const nextBtn = document.createElement('button');
+                nextBtn.innerText = "下一局"; nextBtn.onclick = sendReady;
+                controls.appendChild(nextBtn);
+                const myS = pub.seats[myIdx];
+                if (myS && !myS.revealed) {
+                    const showBtn = document.createElement('button');
+                    showBtn.innerText = "秀牌"; showBtn.style.background = "#722ed1";
+                    showBtn.onclick = () => ws.send(JSON.stringify({type:"show_cards"}));
+                    controls.appendChild(showBtn);
+                }
             }
+
+            if (pub.history) {
+                document.getElementById('log').innerHTML = pub.history.slice(-20).map(h => `<div>${h.name||'系统'}: ${h.action} ${h.to_amount||''} ${h.extra||''}</div>`).join('');
+                document.getElementById('log').scrollTop = 9999;
+            }
+        }
+
+        function addMarker(parent, cls, txt, x, y) {
+            const m = document.createElement('div');
+            m.className = `blind-marker ${cls}`; m.innerHTML = txt;
+            m.style.left = `${x}%`; m.style.top = `${y}%`;
+            parent.appendChild(m);
+        }
 
             data.legal_actions.forEach(act => {
                 const btn = document.createElement('button');
