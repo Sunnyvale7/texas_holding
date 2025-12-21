@@ -12,6 +12,7 @@ env/
 .vscode/
 .cursor/
 .idea/
+.DS_Store
 
 # 日志文件
 *.log
