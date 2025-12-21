@@ -302,14 +302,6 @@
                     console.error("[DEBUG] 解析消息失败:", e);
                 }
             };
-                    showLoanModal(data.message);
-                } else if (data.type === "game_summary") {
-                    showSummaryModal(data.summary);
-                } else if (data.type === "error") {
-                    console.error("[DEBUG] 服务器返回错误:", data.message);
-                    alert(data.message);
-                }
-            };
 
             ws.onerror = (err) => {
                 console.error("[DEBUG] WebSocket 发生错误:", err);
