@@ -291,6 +291,17 @@
                             console.log("[DEBUG] 收到非 UI 状态消息:", data);
                         }
                     } else if (data.type === "loan_request") {
+                        showLoanModal(data.message);
+                    } else if (data.type === "game_summary") {
+                        showSummaryModal(data.summary);
+                    } else if (data.type === "error") {
+                        console.error("[DEBUG] 服务器返回错误:", data.message);
+                        alert(data.message);
+                    }
+                } catch (e) {
+                    console.error("[DEBUG] 解析消息失败:", e);
+                }
+            };
                     showLoanModal(data.message);
                 } else if (data.type === "game_summary") {
                     showSummaryModal(data.summary);
