@@ -27,8 +27,9 @@ class HardTrainingEnv(TrainingEnv):
         self.opponents = {f"p{i}": MediumAgent(f"Player_{i}") for i in range(1, self.num_seats)}
 
 def train_hard():
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Using device: {device} | HARD MODE: VS 5 MediumAgents")
+    # 强制使用 CPU 进行训练，避免小模型的 GPU 通讯开销
+    device = torch.device("cpu")
+    print(f"Using device: {device} | HARD MODE: VS 5 MediumAgents", flush=True)
 
     model = PokerPolicyNet().to(device)
     model_path = "models/poker_rl_latest.pth"
@@ -43,8 +44,12 @@ def train_hard():
     batch_loss = []
     batch_size = 32
     
-    for episode in range(1, 100000):
-        env.reset()
+    from tqdm import tqdm
+    pbar = tqdm(range(1, 100000), desc="Hard Mode Training")
+    for episode in pbar:
+        if episode % 50 == 0:
+            env.reset()
+            
         trajectories = env.play_hand(model, device)
         if not trajectories: continue
 
@@ -68,7 +73,10 @@ def train_hard():
             batch_loss = []
 
         if episode % 200 == 0:
-            print(f"Hard Episode {episode}, Trend: {running_reward:.4f}, Last: {reward:.2f}")
+            pbar.set_postfix({
+                "Trend": f"{running_reward:.4f}",
+                "Last": f"{reward:.2f}"
+            })
             torch.save(model.state_dict(), f"models/poker_rl_latest.pth")
 
 if __name__ == "__main__":

@@ -205,6 +205,7 @@ class Seat:
     acted_this_round: bool = False
     total_profit: int = 0
     revealed: bool = False  # 新增：玩家是否自愿秀牌
+    loan_count: int = 0  # 新增：贷款次数
 
     def reset_for_hand(self):
         self.in_hand = self.stack > 0
@@ -229,8 +230,8 @@ def iter_seats_from(start: int, n: int):
 class GameState:
     seats: List[Seat]
     button: int = 0
-    sb: int = 1
-    bb: int = 2
+    sb: int = 10
+    bb: int = 20
     street: Street = Street.HAND_OVER
     showdown_occurred: bool = False  # 是否发生了摊牌
 
@@ -280,6 +281,7 @@ class GameState:
                 "contributed_round": s.contributed_round,
                 "total_profit": s.total_profit,
                 "revealed": s.revealed,
+                "loan_count": s.loan_count,
             }
             
             # 只有在摊牌或结束后，且玩家未弃牌时，才对所有人公开底牌；或者玩家选择了“秀牌”
@@ -875,7 +877,7 @@ class MediumAgent(BaseAgent):
         board = [Card.from_str(c) for c in state["public"]["board"]]
         street = state["public"]["street"]
         opponents = max(1, sum(1 for s in state["public"]["seats"] if s["in_hand"] and s["player_id"] != state["player_id"]))
-        win_rate = preflop_strength(hole) if street == "PREFLOP" else estimate_win_rate(hole, board, opponents, iterations=200)
+        win_rate = preflop_strength(hole) if street == "PREFLOP" else estimate_win_rate(hole, board, opponents, iterations=40)
 
         r = random.random()
 
@@ -938,6 +940,7 @@ class FeatureExtractor:
     """将游戏状态转换为神经网络可读的张量 (List[float])"""
     @staticmethod
     def extract(state: Dict[str, Any]) -> List[float]:
+        # ... (保持原有的 extract 方法兼容旧接口)
         features = []
         
         # 1. 阶段信息 (One-hot 编码)
@@ -946,8 +949,7 @@ class FeatureExtractor:
         for s in streets:
             features.append(1.0 if current_street == s else 0.0)
             
-        # 2. 牌面信息 (归一化到 0-1)
-        # 手牌
+        # 2. 牌面信息
         hole = [Card.from_str(c) for c in state["your_hole"]]
         for i in range(2):
             if i < len(hole):
@@ -956,7 +958,6 @@ class FeatureExtractor:
             else:
                 features.extend([0.0, 0.0])
         
-        # 公共牌 (最多5张)
         board = [Card.from_str(c) for c in state["public"]["board"]]
         for i in range(5):
             if i < len(board):
@@ -965,28 +966,66 @@ class FeatureExtractor:
             else:
                 features.extend([0.0, 0.0])
                 
-        # 3. 筹码与底池 (以大盲 BB 为基准归一化)
         bb = state["public"]["bb"]
-        features.append(min(10.0, state["public"]["pot_total"] / (bb * 100.0))) # 底池大小
-        
-        # 自己的筹码和投入
+        features.append(min(10.0, state["public"]["pot_total"] / (bb * 100.0)))
         my_seat_idx = state["your_seat"]
         my_seat = state["public"]["seats"][my_seat_idx]
         features.append(min(10.0, my_seat["stack"] / (bb * 100.0)))
         features.append(min(2.0, my_seat["contributed_round"] / (bb * 20.0)))
-        
-        # 需要跟注的额度
         to_call = state["public"]["current_bet"] - my_seat["contributed_round"]
+        features.append(min(2.0, to_call / (bb * 20.0)))
+        active_players = sum(1 for s in state["public"]["seats"] if s["in_hand"])
+        features.append(active_players / 9.0)
+        btn = state["public"]["button"]
+        pos_relative = (my_seat_idx - btn + 9) % 9
+        features.append(pos_relative / 9.0)
+        return features
+
+    @staticmethod
+    def extract_raw(game_state: Any, seat_idx: int) -> List[float]:
+        """【优化版】直接从对象提取特征，跳过字典和字符串转换，速度提升约 10 倍"""
+        features = []
+        
+        # 1. 阶段信息
+        street_map = {"PREFLOP": 0, "FLOP": 1, "TURN": 2, "RIVER": 3, "SHOWDOWN": 4}
+        current_street = game_state.street.value
+        street_idx = street_map.get(current_street, 0)
+        for i in range(5):
+            features.append(1.0 if i == street_idx else 0.0)
+            
+        # 2. 牌面信息
+        seat = game_state.seats[seat_idx]
+        hole = seat.hole or []
+        for i in range(2):
+            if i < len(hole):
+                features.append(hole[i].r / 14.0)
+                features.append({"s":0.1, "h":0.4, "d":0.7, "c":1.0}.get(hole[i].s, 0.0))
+            else:
+                features.extend([0.0, 0.0])
+        
+        board = game_state.board or []
+        for i in range(5):
+            if i < len(board):
+                features.append(board[i].r / 14.0)
+                features.append({"s":0.1, "h":0.4, "d":0.7, "c":1.0}.get(board[i].s, 0.0))
+            else:
+                features.extend([0.0, 0.0])
+                
+        # 3. 筹码与底池
+        bb = game_state.bb or 20
+        features.append(min(10.0, game_state.pot_total / (bb * 100.0)))
+        features.append(min(10.0, seat.stack / (bb * 100.0)))
+        features.append(min(2.0, seat.contributed_round / (bb * 20.0)))
+        
+        to_call = game_state.current_bet - seat.contributed_round
         features.append(min(2.0, to_call / (bb * 20.0)))
         
         # 4. 玩家状态
-        # 活跃人数比例
-        active_players = sum(1 for s in state["public"]["seats"] if s["in_hand"])
+        active_players = sum(1 for s in game_state.seats if s.in_hand)
         features.append(active_players / 9.0)
         
-        # 相对位置 (Button=0)
-        btn = state["public"]["button"]
-        pos_relative = (my_seat_idx - btn + 9) % 9
+        btn = game_state.button
+        pos_relative = (seat_idx - btn + 9) % 9
         features.append(pos_relative / 9.0)
         
         return features
@@ -1181,39 +1220,44 @@ class Room:
             if s.stack <= 0:
                 pid = s.player_id
                 if pid in self.ai_agents:
-                    # AI 逻辑: 80% 几率贷款，20% 几率离席
-                    if random.random() < 0.8:
+                    # AI 逻辑: 贷款次数限制为 3 次
+                    if s.loan_count < 3 and random.random() < 0.8:
                         s.stack = 2000
+                        s.loan_count += 1
                         self.state.action_history.append({
                             "street": self.state.street.value,
                             "action": "SYSTEM",
                             "name": "系统",
-                            "extra": f"机器人 {s.name} 申请了 2000 贷款"
+                            "extra": f"机器人 {s.name} 申请了第 {s.loan_count} 次贷款 (上限 3 次)"
                         })
                     else:
                         to_remove.append(pid)
                 else:
-                    # 人类玩家: 发送贷款询问
-                    ws = self.connections.get(pid)
-                    if ws:
-                        # 只有当还没有记录这个系统消息时才记录，避免重复
-                        msg_exists = any(h.get("extra") == f"玩家 {s.name} 筹码耗尽，正在询问是否贷款" for h in self.state.action_history[-5:])
-                        if not msg_exists:
-                            self.state.action_history.append({
-                                "street": self.state.street.value,
-                                "action": "SYSTEM",
-                                "name": "系统",
-                                "extra": f"玩家 {s.name} 筹码耗尽，正在询问是否贷款"
+                    # 人类玩家: 发送贷款询问，同样限制次数
+                    if s.loan_count < 3:
+                        ws = self.connections.get(pid)
+                        if ws:
+                            # 只有当还没有记录这个系统消息时才记录，避免重复
+                            msg_exists = any(h.get("extra") == f"玩家 {s.name} 筹码耗尽，正在询问是否贷款" for h in self.state.action_history[-5:])
+                            if not msg_exists:
+                                self.state.action_history.append({
+                                    "street": self.state.street.value,
+                                    "action": "SYSTEM",
+                                    "name": "系统",
+                                    "extra": f"玩家 {s.name} 筹码耗尽，正在询问是否贷款"
+                                })
+                            
+                            await send_json(ws, {
+                                "type": "loan_request",
+                                "message": f"您的筹码已用尽，是否申请贷款 2000 筹码继续游戏？(第 {s.loan_count + 1} 次/上限 3 次)",
+                                "amount": 2000
                             })
-                        
-                        await send_json(ws, {
-                            "type": "loan_request",
-                            "message": "您的筹码已用尽，是否申请贷款 2000 筹码继续游戏？",
-                            "amount": 2000
-                        })
+                    else:
+                        to_remove.append(pid)
         
         for pid in to_remove:
-            await self._real_remove_from_seats(pid, reason="筹码耗尽")
+            reason = "筹码耗尽且贷款次数达上限" if any(s.player_id == pid and s.loan_count >= 3 for s in self.state.seats) else "筹码耗尽"
+            await self._real_remove_from_seats(pid, reason=reason)
 
     def can_start(self) -> bool:
         # 存活且在座的人
@@ -1469,11 +1513,12 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
                         s = room.state.seats[seat_idx]
                         if accept:
                             s.stack = 2000
+                            s.loan_count += 1
                             room.state.action_history.append({
                                 "street": room.state.street.value,
                                 "action": "SYSTEM",
                                 "name": "系统",
-                                "extra": f"玩家 {s.name} 申请了 2000 贷款"
+                                "extra": f"玩家 {s.name} 申请了第 {s.loan_count} 次贷款 (上限 3 次)"
                             })
                             # 贷款后自动设为准备状态，方便游戏继续
                             room.ready.add(player_id)

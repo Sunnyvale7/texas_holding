@@ -78,9 +78,10 @@ def map_idx_to_action(idx: int, legal_actions: List[Dict], state: Dict) -> Actio
         info = acts[target_type]
         ratio = float(act_type_val.split("_")[1])
         to_amt = info["min_to"] + int(pot * ratio)
-        to_amt = max(info["min_to"], min(info["max_to"], to_amt))
-        # 圆整到 10
+        # 先圆整到 10
         to_amt = round(to_amt / 10) * 10
+        # 再进行边界裁剪，确保不会超过 stack
+        to_amt = max(info["min_to"], min(info["max_to"], to_amt))
         return Action(ActType(target_type), to_amount=to_amt)
     
     # 如果没法加注，尝试 Call/Check
@@ -114,6 +115,21 @@ class TrainingEnv:
                 self.opponents[p_id] = SimpleAgent(f"Player_{i}")
 
     def play_hand(self, model, device):
+        # 记录开始时的筹码，用于计算奖励
+        initial_stack = self.state.seats[0].stack
+        
+        # 如果筹码太少，自动补满但给予惩罚（模拟破产）
+        bankruptcy_penalty = 0
+        if initial_stack < self.state.bb:
+            self.state.seats[0].stack = 2000
+            initial_stack = 2000
+            bankruptcy_penalty = -100.0 # 严重的破产惩罚
+            
+        # 同时也检查并补满其他对手的筹码，确保游戏能进行
+        for s in self.state.seats:
+            if s.stack < self.state.bb:
+                s.stack = 2000
+
         self.engine.start_hand()
         trajectories = [] # 存储 (obs, action_idx, log_prob, reward)
         
@@ -165,9 +181,9 @@ class TrainingEnv:
                 self.engine.apply_action(seat_i, action)
 
         # 结算奖励
-        # 奖励 = 手牌结束后的筹码量 - 手牌开始前的筹码量 (2000)
+        # 奖励 = 这一局的筹码变化量
         final_stack = self.state.seats[0].stack
-        reward = (final_stack - 2000) / 20.0 # 归一化奖励
+        reward = (final_stack - initial_stack) / 50.0 + bankruptcy_penalty
         
         for t in trajectories:
             t["reward"] = reward
@@ -178,14 +194,18 @@ class TrainingEnv:
 # 4. 主训练循环
 # ----------------------------
 def train():
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Using device: {device}")
+    # 强制使用 CPU 进行训练，避免小模型的 GPU 通讯开销
+    device = torch.device("cpu")
+    print(f"Using device: {device}", flush=True)
 
     model = PokerPolicyNet().to(device)
     model_path = "models/poker_rl_latest.pth"
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-        print("Loaded existing model to continue training...")
+        try:
+            model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+            print(f"Loaded existing model from {model_path} to continue training...", flush=True)
+        except Exception as e:
+            print(f"Could not load model: {e}, starting from scratch.", flush=True)
 
     optimizer = optim.Adam(model.parameters(), lr=5e-5) # 降低学习率，更稳定
     env = TrainingEnv(num_seats=6)
@@ -194,10 +214,18 @@ def train():
     batch_loss = []
     batch_size = 32 # 攒够32局再更新权重
     
-    print("Starting training... (Target: 100,000+ episodes)")
+    print("Starting training... (Target: 100,000+ episodes)", flush=True)
     
-    for episode in range(1, 200000): # 增加到20万局
-        env.reset()
+    if not os.path.exists("models"):
+        os.makedirs("models")
+
+    from tqdm import tqdm
+    pbar = tqdm(range(1, 200000), desc="Standard Training")
+    for episode in pbar:
+        # 每 50 手牌或者破产后强制重置一次环境，防止状态过于离散
+        if episode % 50 == 0:
+            env.reset()
+            
         trajectories = env.play_hand(model, device)
         
         if not trajectories: continue
@@ -230,9 +258,10 @@ def train():
             batch_loss = []
 
         if episode % 200 == 0:
-            print(f"Episode {episode}, Trend: {running_reward:.4f}, Last: {reward:.2f}")
-            
-            if not os.path.exists("models"): os.makedirs("models")
+            pbar.set_postfix({
+                "Trend": f"{running_reward:.4f}",
+                "Last": f"{reward:.2f}"
+            })
             torch.save(model.state_dict(), f"models/poker_rl_latest.pth")
 
 if __name__ == "__main__":
