@@ -333,9 +333,20 @@
 
         function updateUI(data) {
             const pub = data.public;
-            if (pub.street !== "HAND_OVER") showView('gameView');
+            
+            // 1. 视图自动切换逻辑
+            const isLobby = document.getElementById('lobbyView').classList.contains('active');
+            const isGame = document.getElementById('gameView').classList.contains('active');
+            
+            if (!isLobby) {
+                if (pub.street !== "HAND_OVER") {
+                    if (!isGame) showView('gameView');
+                } else {
+                    // 如果在游戏中结束，不跳走，保持看结果；如果在设置页，保持在设置页
+                }
+            }
 
-            // 1. 设置页玩家列表
+            // 2. 设置页玩家列表
             const readySet = new Set(data.ready || []);
             document.getElementById('playerList').innerHTML = pub.seats.map(s => `
                 <div class="hud-item" style="display:flex; align-items:center; gap:8px;">
@@ -458,11 +469,16 @@
                 container.appendChild(seatDiv);
             });
 
-            // 5. 行动按钮
+            // 5. 控制面板更新 (确保即便在 HAND_OVER 也能看到最后的手牌)
             const controls = document.getElementById('actionControls');
             const raiseBox = document.getElementById('raiseBox');
             controls.innerHTML = ""; raiseBox.style.display = 'none';
-            document.getElementById('myHole').innerHTML = data.your_hole.map(formatCard).join('');
+            
+            if (data.your_hole && data.your_hole.length > 0) {
+                document.getElementById('myHole').innerHTML = data.your_hole.map(formatCard).join('');
+            } else {
+                document.getElementById('myHole').innerHTML = "";
+            }
 
             data.legal_actions.forEach(act => {
                 const btn = document.createElement('button');
@@ -506,7 +522,14 @@
         function respondSeeRequest(acc) { ws.send(JSON.stringify({ type: "respond_see_request", accept: acc })); document.getElementById('seeRequestModal').style.display='none'; }
         function requestSee(tid) { const amt = prompt("支付多少筹码？", "50"); if(amt) ws.send(JSON.stringify({ type: "request_see_cards", target_id: tid, amount: parseInt(amt) })); }
         function sendReady() { ws.send(JSON.stringify({ type: "ready" })); }
-        function leaveRoom() { isIntentionalLeave = true; ws.send(JSON.stringify({ type: "leave" })); location.reload(); }
+        function leaveRoom() { 
+            isIntentionalLeave = true; 
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "leave" }));
+            } else {
+                location.reload();
+            }
+        }
         function addAI() { ws.send(JSON.stringify({ type: "add_ai", level: document.getElementById('aiLevel').value, stack: 2000 })); }
         function kickAI(id) { ws.send(JSON.stringify({ type: "kick_ai", ai_id: id })); }
         function updateConfig() { ws.send(JSON.stringify({ type: "update_config", sb: parseInt(document.getElementById('sbInput').value), bb: parseInt(document.getElementById('bbInput').value) })); }
