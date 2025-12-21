@@ -56,6 +56,41 @@
             max-width: 400px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
+
+        /* 规则模态框 */
+        #rulesModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .rules-content {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            max-width: 450px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .rules-list {
+            text-align: left;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+        .rules-item {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #f0f0f0;
+            padding: 8px 0;
+        }
+        .rules-item:last-child { border-bottom: none; }
+        .rules-rank { font-weight: bold; color: #1890ff; }
+        .rules-desc { color: #666; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -83,6 +118,29 @@
         </div>
     </div>
 
+    <!-- 规则说明模态框 -->
+    <div id="rulesModal">
+        <div class="rules-content">
+            <h3 style="margin-top:0; text-align:center; color: #1890ff;">德州扑克牌型规则</h3>
+            <div class="rules-list">
+                <div class="rules-item"><span class="rules-rank">同花顺</span> <span class="rules-desc">五张同花色且连续的牌 (最高为皇家同花顺)</span></div>
+                <div class="rules-item"><span class="rules-rank">四条 (炸弹)</span> <span class="rules-desc">四张相同数值的牌 + 一张单牌</span></div>
+                <div class="rules-item"><span class="rules-rank">葫芦</span> <span class="rules-desc">三张相同数值 + 一对</span></div>
+                <div class="rules-item"><span class="rules-rank">同花</span> <span class="rules-desc">五张同花色的牌 (不连续)</span></div>
+                <div class="rules-item"><span class="rules-rank">顺子</span> <span class="rules-desc">五张连续数值的牌 (不同花色)</span></div>
+                <div class="rules-item"><span class="rules-rank">三条</span> <span class="rules-desc">三张相同数值 + 两张单牌</span></div>
+                <div class="rules-item"><span class="rules-rank">两对</span> <span class="rules-desc">两个对子 + 一张单牌</span></div>
+                <div class="rules-item"><span class="rules-rank">一对</span> <span class="rules-desc">一个对子 + 三张单牌</span></div>
+                <div class="rules-item"><span class="rules-rank">高牌</span> <span class="rules-desc">不满足以上任何牌型，按最大单牌比大小</span></div>
+            </div>
+            <div style="background: #f6f6f6; padding: 10px; border-radius: 6px; font-size: 13px; color: #555; margin-bottom: 15px;">
+                <strong>大小排序：</strong><br>
+                同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌
+            </div>
+            <button onclick="toggleRules(false)" style="width: 100%;">关闭</button>
+        </div>
+    </div>
+
     <div class="card-panel">
         <!-- 1. 大厅视图 -->
         <div id="lobbyView" class="view active">
@@ -101,6 +159,7 @@
                     <input type="text" id="playerName" value="小王">
                 </div>
                 <button onclick="connect()">进入房间</button>
+                <button class="secondary" style="background: #fa8c16;" onclick="toggleRules(true)">查看规则</button>
             </div>
         </div>
 
@@ -108,7 +167,10 @@
         <div id="setupView" class="view">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 id="setupTitle">房间设置</h2>
-                <span id="connStatus" style="font-size: 12px; color: green;">● 已连接</span>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button style="padding: 4px 12px; font-size: 12px; background: #fa8c16; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="toggleRules(true)">游戏规则</button>
+                    <span id="connStatus" style="font-size: 12px; color: green;">● 已连接</span>
+                </div>
             </div>
             
             <div class="config-box">
@@ -150,7 +212,10 @@
                     底池: <span id="displayPot" style="color: #52c41a; font-size: 1.2em;">0</span>
                     <span id="gameReadyList" style="margin-left:20px; font-size: 12px; color: #666;"></span>
                 </div>
-                <button class="danger" style="padding: 4px 12px; font-size: 12px;" onclick="leaveRoom()">退出房间</button>
+                <div style="display: flex; gap: 8px;">
+                    <button style="padding: 4px 12px; font-size: 12px; background: #fa8c16;" onclick="toggleRules(true)">游戏规则</button>
+                    <button class="danger" style="padding: 4px 12px; font-size: 12px;" onclick="leaveRoom()">退出房间</button>
+                </div>
             </div>
 
             <div class="container">
@@ -184,6 +249,10 @@
         function showView(viewId) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(viewId).classList.add('active');
+        }
+
+        function toggleRules(show) {
+            document.getElementById('rulesModal').style.display = show ? 'flex' : 'none';
         }
 
         function connect() {
