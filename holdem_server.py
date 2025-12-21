@@ -564,6 +564,7 @@ class HoldemEngine:
                         "name": s.name,
                         "won": win_amount if i == winner else 0,
                         "lost": s.contributed_total,
+                        "folded": i != winner,
                     })
 
             self.st.action_history.append({
@@ -694,12 +695,14 @@ class HoldemEngine:
             if s.contributed_total > 0 or won > 0:
                 s.stack += won
                 s.total_profit += won
+                is_folded = i not in alive
                 results.append({
                     "seat": i,
                     "name": s.name,
                     "won": won,
                     "lost": s.contributed_total,
-                    "hand_type": hand_names.get(i, "已弃牌"),
+                    "folded": is_folded,
+                    "hand_type": hand_names.get(i, "已弃牌") if not is_folded else "已弃牌",
                     "hole": [str(c) for c in s.hole] if s.hole else [],
                     "best_hand": best_hands.get(i, [])
                 })

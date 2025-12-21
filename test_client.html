@@ -506,7 +506,10 @@
             if (pub.history) {
                 document.getElementById('log').innerHTML = pub.history.slice(-20).map(h => {
                     let text = `${h.name||'系统'}: ${h.action}`;
-                    if (h.to_amount !== undefined && h.to_amount !== null) text += ` ${h.to_amount}`;
+                    // 只有 BET, RAISE, CALL, BLIND 才显示金额
+                    if (['BET', 'RAISE', 'CALL', 'BLIND', 'SB', 'BB'].includes(h.action) && h.to_amount !== undefined && h.to_amount !== null) {
+                        text += ` ${h.to_amount}`;
+                    }
                     if (h.extra) {
                         if (typeof h.extra === 'string') text += ` ${h.extra}`;
                         else if (h.extra.called) text += ` (补${h.extra.called})`;
@@ -549,29 +552,17 @@
                 lastAction.results.forEach(r => {
                     const profit = r.won - r.lost;
                     const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
-                    const status = r.won > 0 ? '🏆' : (r.hand_type === '已弃牌' ? '🃏' : '❌');
+                    const isFolded = r.folded || (!r.won && lastAction.action === "WIN_NO_SHOWDOWN");
+                    const status = r.won > 0 ? '🏆 赢家' : (isFolded ? '🃏 弃牌' : '❌ 输');
                     const bestCards = r.best_hand?.length ? r.best_hand.map(formatMiniCard).join('') : '-';
+                    const holeCards = r.hole?.length ? r.hole.map(formatMiniCard).join('') : '-';
+                    const handType = lastAction.action === "WIN_NO_SHOWDOWN" ? "未摊牌" : (r.hand_type || '-');
                     html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <td style="padding:8px; font-weight:bold;">${r.name}</td>
                         <td style="padding:8px; text-align:center;">${status}</td>
-                        <td style="padding:8px; text-align:center;">${r.hole?.length ? r.hole.map(formatMiniCard).join('') : '?'}</td>
+                        <td style="padding:8px; text-align:center;">${holeCards}</td>
                         <td style="padding:8px; text-align:center;">${bestCards}</td>
-                        <td style="padding:8px; text-align:center; color:#fbbf24; font-size:11px;">${r.hand_type || '-'}</td>
-                        <td style="padding:8px; text-align:right; color:${profitColor}; font-weight:bold;">${profit > 0 ? '+' : ''}${profit}</td>
-                    </tr>`;
-                });
-            } else if (lastAction.winner) {
-                // WIN_NO_SHOWDOWN 情况
-                seats.forEach((s, i) => {
-                    const isWinner = i === lastAction.winner_seat;
-                    const profit = isWinner ? lastAction.pot : -s.contributed_total;
-                    const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
-                    html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <td style="padding:8px; font-weight:bold;">${s.name}</td>
-                        <td style="padding:8px; text-align:center;">${isWinner ? '🏆' : '🃏'}</td>
-                        <td style="padding:8px; text-align:center;">-</td>
-                        <td style="padding:8px; text-align:center;">-</td>
-                        <td style="padding:8px; text-align:center; color:#94a3b8;">未摊牌</td>
+                        <td style="padding:8px; text-align:center; color:#fbbf24; font-size:11px;">${handType}</td>
                         <td style="padding:8px; text-align:right; color:${profitColor}; font-weight:bold;">${profit > 0 ? '+' : ''}${profit}</td>
                     </tr>`;
                 });
