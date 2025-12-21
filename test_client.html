@@ -97,7 +97,7 @@
 
         /* 玩家座位 */
         .seat {
-            position: absolute; width: 185px; padding: 15px;
+            position: absolute; width: 185px; padding: 15px; padding-bottom: 45px;
             background: rgba(15, 23, 42, 0.95); border-radius: 20px;
             border: 2px solid transparent; transition: all 0.3s;
             box-shadow: 0 10px 30px rgba(0,0,0,0.4);
@@ -122,13 +122,13 @@
 
         /* 庄位/盲注圆盘 (锚定在方框角落) */
         .blind-marker {
-            position: absolute; width: 36px; height: 36px; border-radius: 50%;
+            position: absolute; width: 50px; height: 50px; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
-            font-size: 9px; font-weight: bold; text-transform: uppercase;
+            font-size: 8px; font-weight: bold; text-transform: uppercase;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 35;
-            top: -15px; right: -15px; /* 挂在右上角 */
-            border: 2px solid rgba(255,255,255,0.2);
-            text-align: center; line-height: 1; padding: 2px; box-sizing: border-box;
+            top: -20px; right: -20px; /* 挂在右上角 */
+            border: 2px solid rgba(255,255,255,0.3);
+            text-align: center; line-height: 1.1; padding: 3px; box-sizing: border-box;
         }
         .marker-dealer { background: #ffffff; color: #333; }
         .marker-sb { background: #fbbf24; color: #000; }
@@ -424,25 +424,28 @@
                 seatDiv.innerHTML = `
                     <div class="player-info"><span class="player-name">${s.name}</span><div class="player-stack">${renderChips(s.stack)}</div></div>
                     <div style="display:flex; gap:4px; justify-content:center; margin:5px 0;">${cards.map(formatCard).join('')}</div>
-                    <div class="chip-container">投: ${renderChips(s.contributed_round, true)}</div>
                     ${res ? `<div style="color:${res.won-res.lost>0?'#4ade80':'#f87171'};font-size:11px;font-weight:bold;margin-top:4px">本局: ${res.won-res.lost>0?'+':''}${res.won-res.lost}</div>`:''}
                     ${pub.street === 'HAND_OVER' && i !== myIdx && s.in_hand && (!s.hole || s.hole[0]==="??") && !s.revealed ? `<button onclick="requestSee('${s.player_id}')" style="padding:2px;font-size:10px;margin-top:5px">买牌</button>` : ''}
+                    <div style="position:absolute; bottom:8px; right:10px; text-align:right; font-size:11px; color:#94a3b8;">
+                        <div>本轮: <span style="color:#ef4444; font-weight:bold;">${s.contributed_round}</span></div>
+                        <div>本局: <span style="color:#fbbf24;">${s.contributed_total}</span></div>
+                    </div>
                 `;
 
                 // 绘制圆盘标记 (在 innerHTML 之后追加，防止被覆盖)
                 if (i === pub.button) {
                     const m = document.createElement('div');
-                    m.className = 'blind-marker marker-dealer'; m.innerHTML = 'D';
+                    m.className = 'blind-marker marker-dealer'; m.innerHTML = 'Dealer';
                     seatDiv.appendChild(m);
                 }
                 if (i === pub.sb_pos) {
                     const m = document.createElement('div');
-                    m.className = 'blind-marker marker-sb'; m.innerHTML = 'SB';
+                    m.className = 'blind-marker marker-sb'; m.innerHTML = 'Small<br>Blind';
                     seatDiv.appendChild(m);
                 }
                 if (i === pub.bb_pos) {
                     const m = document.createElement('div');
-                    m.className = 'blind-marker marker-bb'; m.innerHTML = 'BB';
+                    m.className = 'blind-marker marker-bb'; m.innerHTML = 'Big<br>Blind';
                     seatDiv.appendChild(m);
                 }
 
