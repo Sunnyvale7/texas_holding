@@ -262,11 +262,10 @@
             const stack = document.getElementById('startStackInput').value;
             myPlayerId = pid;
 
+            // 智能识别连接协议和主机名
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            const host = window.location.hostname || "127.0.0.1";
-            // 修复逻辑：优先使用当前页面的端口
-            const port = window.location.port; 
-            const wsUrl = `${protocol}://${host}${port ? ':' + port : ''}/ws/${rid}/${pid}`;
+            const host = window.location.host; // 包含域名和端口 (如果有)
+            const wsUrl = `${protocol}://${host}/ws/${rid}/${pid}`;
             
             console.log("Connecting to:", wsUrl);
             ws = new WebSocket(wsUrl);
