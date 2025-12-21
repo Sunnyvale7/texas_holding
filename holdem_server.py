@@ -993,6 +993,22 @@ class FeatureExtractor:
         btn = state["public"]["button"]
         pos_relative = (my_seat_idx - btn + 9) % 9
         features.append(pos_relative / 9.0)
+
+        # 10. 【新增】翻牌前牌力 (26维)
+        if len(hole) == 2:
+            from holdem_server import preflop_strength
+            features.append(preflop_strength(hole))
+        else:
+            features.append(0.0)
+
+        # 11. 【新增】蒙特卡洛胜率模拟 (27维)
+        if len(hole) == 2 and current_street != "PREFLOP":
+            from holdem_server import estimate_win_rate
+            active_opponents = max(1, sum(1 for s in state["public"]["seats"] if s["in_hand"]) - 1)
+            features.append(estimate_win_rate(hole, board, active_opponents, iterations=20))
+        else:
+            features.append(0.0)
+
         return features
 
     @staticmethod
@@ -1042,6 +1058,21 @@ class FeatureExtractor:
         pos_relative = (seat_idx - btn + 9) % 9
         features.append(pos_relative / 9.0)
         
+        # 5. 【新增】显式牌力信息 (26维)
+        if len(hole) == 2:
+            from holdem_server import preflop_strength
+            features.append(preflop_strength(hole))
+        else:
+            features.append(0.0)
+            
+        # 6. 【新增】蒙特卡洛胜率模拟 (27维)
+        if len(hole) == 2 and current_street != "PREFLOP":
+            from holdem_server import estimate_win_rate
+            active_opponents = max(1, sum(1 for s in game_state.seats if s.in_hand) - 1)
+            features.append(estimate_win_rate(hole, board, active_opponents, iterations=20))
+        else:
+            features.append(0.0)
+            
         return features
 
 class RLAgent(BaseAgent):

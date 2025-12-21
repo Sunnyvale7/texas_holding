@@ -72,8 +72,15 @@ def evaluate():
     model_path = "models/poker_rl_latest.pth"
     
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-        print(f"Successfully loaded model: {model_path}")
+        try:
+            state_dict = torch.load(model_path, map_location=device, weights_only=True)
+            if state_dict['fc1.weight'].shape[1] == 27:
+                model.load_state_dict(state_dict)
+                print(f"Successfully loaded model: {model_path}")
+            else:
+                print(f"Architecture mismatch (Model: {state_dict['fc1.weight'].shape[1]} dims, Expected: 27). Using random weights.")
+        except Exception as e:
+            print(f"Error loading model: {e}. Using random weights.")
     else:
         print("No trained model found. Running with random weights.")
 

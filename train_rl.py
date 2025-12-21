@@ -17,13 +17,13 @@ from holdem_server import (
 # 1. 神经网络模型定义
 # ----------------------------
 class PokerPolicyNet(nn.Module):
-    def __init__(self, input_dim=25, output_dim=6): # 修正为 25
+    def __init__(self, input_dim=27, output_dim=6): # 升级为 27 维 (引入后手胜率)
         super(PokerPolicyNet, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.action_head = nn.Linear(64, output_dim)
-        self.value_head = nn.Linear(64, 1) # 用于 Actor-Critic
+        self.fc1 = nn.Linear(input_dim, 256) # 拓宽网络以处理更复杂特征
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.action_head = nn.Linear(128, output_dim)
+        self.value_head = nn.Linear(128, 1) # 用于 Actor-Critic
 
     def forward(self, x):
         # 确保输入至少是 2D (batch_size, input_dim)
@@ -123,7 +123,7 @@ class TrainingEnv:
         if initial_stack < self.state.bb:
             self.state.seats[0].stack = 2000
             initial_stack = 2000
-            bankruptcy_penalty = -100.0 # 严重的破产惩罚
+            bankruptcy_penalty = -20.0 # 降低破产惩罚，避免模型过度胆小
             
         # 同时也检查并补满其他对手的筹码，确保游戏能进行
         for s in self.state.seats:
@@ -202,8 +202,13 @@ def train():
     model_path = "models/poker_rl_latest.pth"
     if os.path.exists(model_path):
         try:
-            model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-            print(f"Loaded existing model from {model_path} to continue training...", flush=True)
+            state_dict = torch.load(model_path, map_location=device, weights_only=True)
+            # 检查维度是否匹配 (fc1.weight 的输入维度应该是 27)
+            if state_dict['fc1.weight'].shape[1] == 27:
+                model.load_state_dict(state_dict)
+                print(f"Loaded existing model from {model_path} to continue training...", flush=True)
+            else:
+                print(f"Architecture mismatch (Old: {state_dict['fc1.weight'].shape[1]} dims, New: 27 dims). Starting fresh.", flush=True)
         except Exception as e:
             print(f"Could not load model: {e}, starting from scratch.", flush=True)
 
@@ -239,12 +244,12 @@ def train():
             advantage = t["reward"] - running_reward
             
             # 2. 引入熵损失 (Entropy Loss): 鼓励探索，防止坍缩为“只会弃牌”
-            # 重新计算概率分布来获取熵
+            # 提高权重到 0.05，强制模型探索更多动作
             probs, _ = model(torch.FloatTensor(t["obs"]).to(device))
             dist = torch.distributions.Categorical(probs[0])
             entropy = dist.entropy()
             
-            loss = -t["log_prob"] * advantage - 0.01 * entropy
+            loss = -t["log_prob"] * advantage - 0.05 * entropy
             batch_loss.append(loss)
         
         # 达到批次大小后更新

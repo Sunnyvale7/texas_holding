@@ -82,6 +82,26 @@
         .suit-h, .suit-d { color: #f5222d; }
         .controls { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
 
+        /* 筹码视觉样式 */
+        .chip-container { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+        .chip-stack { position: relative; width: 18px; height: 18px; display: inline-block; }
+        .chip { 
+            position: absolute; width: 16px; height: 16px; border-radius: 50%; 
+            border: 2px dashed rgba(255,255,255,0.6); 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            bottom: 0; left: 0;
+        }
+        .chip-1 { background: #ff4d4f; bottom: 0px; } /* 红色 */
+        .chip-2 { background: #ff4d4f; bottom: 3px; }
+        .chip-3 { background: #ff4d4f; bottom: 6px; }
+        
+        .chip-blue { background: #1890ff; }
+        .chip-red { background: #ff4d4f; }
+        .chip-gold { background: #faad14; }
+        .chip-green { background: #52c41a; }
+
+        .pot-visual { background: #333; color: #faad14; padding: 5px 12px; border-radius: 20px; border: 2px solid #faad14; display: inline-flex; align-items: center; gap: 8px; }
+
         /* 贷款模态框 */
         #loanModal {
             display: none;
@@ -267,7 +287,10 @@
             <div class="game-header">
                 <div>
                     <strong id="displayStreet">PREFLOP</strong> | 
-                    底池: <span id="displayPot" style="color: #52c41a; font-size: 1.2em;">0</span>
+                    <div class="pot-visual">
+                        <div id="potChips"></div>
+                        底池: <span id="displayPot">0</span>
+                    </div>
                     <span id="activePlayers" class="active-players-count" style="margin-left: 10px;">在场: 0人</span>
                     <div id="turnInfo" class="turn-info"></div>
                     <span id="gameReadyList" style="margin-left:20px; font-size: 12px; color: #666;"></span>
@@ -493,6 +516,18 @@
             return `<div class="card ${suitClass}">${val}${suitIcon}</div>`;
         }
 
+        function renderChips(amount, colorClass = "chip-blue") {
+            if (amount <= 0) return "";
+            // 根据金额决定显示多少个筹码视觉效果 (最多显示3个层叠)
+            const count = amount >= 500 ? 3 : (amount >= 100 ? 2 : 1);
+            let chipsHtml = `<div class="chip-stack">`;
+            for (let i = 1; i <= count; i++) {
+                chipsHtml += `<div class="chip ${colorClass}" style="bottom: ${(i-1)*3}px;"></div>`;
+            }
+            chipsHtml += `</div>`;
+            return `<div class="chip-container">${chipsHtml}<span>${amount}</span></div>`;
+        }
+
         function updateUI(data) {
             const pub = data.public;
             
@@ -525,6 +560,7 @@
             // 2. 游戏页面更新
             document.getElementById('displayStreet').innerText = pub.street;
             document.getElementById('displayPot').innerText = pub.pot_total;
+            document.getElementById('potChips').innerHTML = renderChips(pub.pot_total, "chip-gold");
             document.getElementById('gameReadyList').innerText = readyNames.length > 0 ? ("已准备: " + readyNames.join(', ')) : "";
             document.getElementById('board').innerHTML = pub.board.map(formatCard).join('');
 
@@ -642,11 +678,11 @@
                                 <span style="font-size:12px; color:${s.total_profit >= 0 ? '#52c41a' : '#ff4d4f'}; margin-right:5px;">
                                     ${s.total_profit >= 0 ? '+' : ''}${s.total_profit}
                                 </span>
-                                💰${s.stack}
+                                ${renderChips(s.stack, "chip-blue")}
                             </div>
                         </div>
                         <div style="font-size:12px; color:#666; margin-top:5px; display: flex; justify-content: space-between;">
-                            <span>本轮投入: <b>${s.contributed_round}</b> <small>(总投入: ${s.contributed_total})</small></span>
+                            <span>本轮投入: ${renderChips(s.contributed_round, "chip-red")} <small>(总投入: ${s.contributed_total})</small></span>
                             <span>${s.in_hand ? (s.all_in ? '<b style="color:#f5222d">ALL-IN</b>' : '<b style="color:#52c41a">进行中</b>') : '<b style="color:#bfbfbf">已弃牌</b>'}</span>
                         </div>
                         ${holeHtml}

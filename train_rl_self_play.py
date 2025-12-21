@@ -81,7 +81,7 @@ class SelfPlayEnv:
         if initial_stack < self.state.bb:
             self.state.seats[self.train_idx].stack = 2000
             initial_stack = 2000
-            bankruptcy_penalty = -100.0 # 严重的破产惩罚
+            bankruptcy_penalty = -20.0 # 降低破产惩罚
             
         # 同时也检查并补满其他对手的筹码，确保游戏能进行
         for s in self.state.seats:
@@ -124,6 +124,7 @@ class SelfPlayEnv:
         final_stack = self.state.seats[self.train_idx].stack
         # 奖励 = (结束筹码 - 开始筹码) / 50.0 + 破产惩罚
         reward = (final_stack - initial_stack) / 50.0 + bankruptcy_penalty
+
         for t in trajectories: t["reward"] = reward
         return trajectories
 
@@ -137,8 +138,12 @@ def train_self_play():
     model_path = "models/poker_rl_latest.pth"
     if os.path.exists(model_path):
         try:
-            model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-            print(f"成功加载旧模型: {model_path}", flush=True)
+            state_dict = torch.load(model_path, map_location=device, weights_only=True)
+            if state_dict['fc1.weight'].shape[1] == 27:
+                model.load_state_dict(state_dict)
+                print(f"成功加载旧模型: {model_path}", flush=True)
+            else:
+                print(f"模型维度不匹配 (旧: {state_dict['fc1.weight'].shape[1]} 维, 新: 27 维)。将从零开始训练。", flush=True)
         except Exception as e:
             print(f"加载模型失败: {e}, 将从零开始训练。", flush=True)
 
@@ -167,7 +172,12 @@ def train_self_play():
         
         for t in trajectories:
             advantage = t["reward"] - 0 # 自博弈中，baseline 很难定义，通常设为 0
-            loss = -t["log_prob"] * advantage
+            # 引入熵损失，防止坍缩
+            probs, _ = model(torch.FloatTensor(t["obs"]).to(device))
+            dist = torch.distributions.Categorical(probs[0])
+            entropy = dist.entropy()
+            
+            loss = -t["log_prob"] * advantage - 0.05 * entropy
             batch_loss.append(loss)
         
         if episode % batch_size == 0:
