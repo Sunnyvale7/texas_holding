@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+websockets
+torch
+numpy
+python-dotenv
+

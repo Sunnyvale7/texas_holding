@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>德州扑克 - 多房间版</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card-panel { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 800px; }
+        h2 { text-align: center; color: #1a1a1a; margin-top: 0; }
+        
+        /* 视图切换 */
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* 大厅样式 */
+        .lobby-form { display: flex; flex-direction: column; gap: 15px; }
+        .input-group { display: flex; flex-direction: column; gap: 5px; }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
+        button { padding: 12px; background: #1890ff; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+        button:hover { background: #40a9ff; }
+        button.secondary { background: #52c41a; }
+        button.danger { background: #ff4d4f; }
+
+        /* 设置页面样式 */
+        .player-tag { background: #f5f5f5; padding: 8px 12px; border-radius: 20px; display: inline-block; margin: 5px; border: 1px solid #eee; }
+        .config-box { background: #fafafa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee; }
+
+        /* 游戏页面样式 */
+        .game-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; position: relative; z-index: 1050; }
+        .container { display: flex; gap: 20px; }
+        .table-area { flex: 2; }
+        .side-panel { flex: 1; }
+        .log { height: 200px; overflow-y: auto; background: #1e1e1e; color: #aaa; padding: 10px; font-family: monospace; font-size: 11px; border-radius: 4px; margin-top: 10px; }
+        .seat { border: 2px solid #eee; padding: 12px; margin-bottom: 10px; border-radius: 8px; position: relative; transition: all 0.3s; }
+        .seat.active { border-color: #1890ff; background: #e6f7ff; transform: scale(1.02); }
+        .card { display: inline-block; width: 35px; height: 50px; border: 1px solid #333; border-radius: 4px; text-align: center; line-height: 50px; margin-right: 4px; background: white; font-weight: bold; font-size: 14px; box-shadow: 1px 1px 3px rgba(0,0,0,0.2); }
+        .suit-h, .suit-d { color: #f5222d; }
+        .controls { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* 贷款模态框 */
+        #loanModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loanModal">
+        <div class="modal-content">
+            <h3 style="margin-top:0">筹码已用尽</h3>
+            <p id="loanMessage"></p>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+                <button onclick="respondLoan(true)">申请贷款</button>
+                <button class="danger" onclick="respondLoan(false)">离开房间</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 离席结算总结模态框 -->
+    <div id="summaryModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1100; justify-content: center; align-items: center;">
+        <div class="modal-content" style="max-width: 500px; width: 90%;">
+            <h2 style="margin-top:0; color: #1890ff;">游戏结算总结</h2>
+            <div id="summaryTable" style="margin: 20px 0; max-height: 300px; overflow-y: auto;">
+                <!-- 动态填充 -->
+            </div>
+            <p style="color: #666; font-size: 13px;">感谢您的参与，房间已断开连接。</p>
+            <button onclick="location.reload()" style="width: 100%; margin-top: 10px;">返回大厅</button>
+        </div>
+    </div>
+
+    <div class="card-panel">
+        <!-- 1. 大厅视图 -->
+        <div id="lobbyView" class="view active">
+            <h2>游戏大厅</h2>
+            <div class="lobby-form">
+                <div class="input-group">
+                    <label>房间号</label>
+                    <input type="text" id="roomId" value="room1">
+                </div>
+                <div class="input-group">
+                    <label>玩家ID (唯一)</label>
+                    <input type="text" id="playerId" value="player1">
+                </div>
+                <div class="input-group">
+                    <label>昵称</label>
+                    <input type="text" id="playerName" value="小王">
+                </div>
+                <button onclick="connect()">进入房间</button>
+            </div>
+        </div>
+
+        <!-- 2. 设置/等待视图 -->
+        <div id="setupView" class="view">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 id="setupTitle">房间设置</h2>
+                <span id="connStatus" style="font-size: 12px; color: green;">● 已连接</span>
+            </div>
+            
+            <div class="config-box">
+                <h4>当前玩家:</h4>
+                <div id="playerList"></div>
+            </div>
+
+            <div class="config-box">
+                <h4>规则设置:</h4>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
+                    <label>小盲 (SB): <input type="number" id="sbInput" value="10" style="width: 60px;"></label>
+                    <label>大盲 (BB): <input type="number" id="bbInput" value="20" style="width: 60px;"></label>
+                    <label>初始筹码: <input type="number" id="startStackInput" value="2000" style="width: 80px;"></label>
+                </div>
+                <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">
+                    <button class="secondary" onclick="updateConfig()">同步规则</button>
+                    <button class="secondary" onclick="resetStacks()">重置筹码</button>
+                    <div style="border: 1px solid #ccc; padding: 5px; border-radius: 6px; background: #fff;">
+                        <select id="aiLevel" style="border: none; outline: none; padding: 5px;">
+                            <option value="simple">初级机器人 (随机)</option>
+                            <option value="medium">中级机器人 (理智)</option>
+                            <option value="hard">高级机器人 (RL训练中)</option>
+                        </select>
+                        <button class="secondary" style="background: #722ed1; padding: 5px 15px;" onclick="addAI()">添加机器人</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button style="width: 200px; font-size: 18px;" onclick="sendReady()">我准备好了！</button>
+            </div>
+        </div>
+
+        <!-- 3. 游戏视图 -->
+        <div id="gameView" class="view">
+            <div class="game-header">
+                <div>
+                    <strong id="displayStreet">PREFLOP</strong> | 
+                    底池: <span id="displayPot" style="color: #52c41a; font-size: 1.2em;">0</span>
+                    <span id="gameReadyList" style="margin-left:20px; font-size: 12px; color: #666;"></span>
+                </div>
+                <button class="danger" style="padding: 4px 12px; font-size: 12px;" onclick="leaveRoom()">退出房间</button>
+            </div>
+
+            <div class="container">
+                <div class="table-area">
+                    <div id="board" style="min-height: 60px; margin-bottom: 20px;"></div>
+                    <div id="seatsList"></div>
+                </div>
+
+                <div class="side-panel">
+                    <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+                        <h4>我的手牌</h4>
+                        <div id="myHole" style="margin-bottom: 15px;"></div>
+                        <div id="actionControls" class="controls"></div>
+                        <div id="raiseBox" style="margin-top: 10px; display:none;">
+                            <input type="number" id="raiseAmount" style="width: 100px;">
+                            <small id="raiseHint" style="display:block; color: #888;"></small>
+                        </div>
+                    </div>
+                    <div class="log" id="log"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let myPlayerId = "";
+
+        let isIntentionalLeave = false;
+
+        function showView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+        }
+
+        function connect() {
+            const rid = document.getElementById('roomId').value;
+            const pid = document.getElementById('playerId').value;
+            const name = document.getElementById('playerName').value;
+            const stack = document.getElementById('startStackInput').value;
+            myPlayerId = pid;
+
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const host = window.location.hostname || "127.0.0.1";
+            const port = window.location.port || (window.location.protocol === 'https:' ? '' : '8000');
+            const wsUrl = `${protocol}://${host}${port ? ':' + port : ''}/ws/${rid}/${pid}`;
+            
+            console.log("Connecting to:", wsUrl);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: "join", name: name, stack: parseInt(stack) }));
+                showView('setupView');
+                document.getElementById('setupTitle').innerText = `房间: ${rid}`;
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === "state") {
+                    updateUI(data);
+                } else if (data.type === "loan_request") {
+                    showLoanModal(data.message);
+                } else if (data.type === "game_summary") {
+                    showSummaryModal(data.summary);
+                } else if (data.type === "error") {
+                    alert(data.message);
+                }
+            };
+
+            ws.onclose = () => {
+                if (!isIntentionalLeave) {
+                    alert("连接已断开");
+                    showView('lobbyView');
+                }
+                hideLoanModal();
+            };
+        }
+
+        function showLoanModal(msg) {
+            document.getElementById('loanMessage').innerText = msg;
+            document.getElementById('loanModal').style.display = 'flex';
+        }
+
+        function showSummaryModal(summary) {
+            isIntentionalLeave = true; // 标记为有意离开，防止 onclose 弹窗
+            const table = document.getElementById('summaryTable');
+            let html = `
+                <table style="width:100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #eee;">
+                            <th style="text-align:left; padding: 8px;">玩家</th>
+                            <th style="text-align:right; padding: 8px;">最终盈亏</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            summary.sort((a, b) => b.profit - a.profit).forEach(s => {
+                const color = s.profit >= 0 ? '#52c41a' : '#ff4d4f';
+                const sign = s.profit > 0 ? '+' : '';
+                html += `
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="padding: 10px 8px;">
+                            ${s.name} ${s.is_ai ? '<small style="color:#999">(AI)</small>' : ''}
+                        </td>
+                        <td style="text-align:right; padding: 10px 8px; font-weight: bold; color: ${color};">
+                            ${sign}${s.profit}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += `</tbody></table>`;
+            table.innerHTML = html;
+            document.getElementById('summaryModal').style.display = 'flex';
+        }
+
+        function hideLoanModal() {
+            document.getElementById('loanModal').style.display = 'none';
+        }
+
+        function respondLoan(accept) {
+            if (!accept) isIntentionalLeave = true;
+            ws.send(JSON.stringify({ type: "loan_response", accept: accept }));
+            hideLoanModal();
+        }
+
+        function leaveRoom() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                isIntentionalLeave = true;
+                ws.send(JSON.stringify({ type: "leave" }));
+            } else {
+                location.reload();
+            }
+        }
+
+        function sendReady() { ws.send(JSON.stringify({ type: "ready" })); }
+        function updateConfig() {
+            const sb = document.getElementById('sbInput').value;
+            const bb = document.getElementById('bbInput').value;
+            ws.send(JSON.stringify({ type: "update_config", sb: parseInt(sb), bb: parseInt(bb) }));
+        }
+        function resetStacks() {
+            const stack = document.getElementById('startStackInput').value;
+            ws.send(JSON.stringify({ type: "reset_stacks", stack: parseInt(stack) }));
+        }
+        function addAI() {
+            const stack = document.getElementById('startStackInput').value;
+            const level = document.getElementById('aiLevel').value;
+            ws.send(JSON.stringify({ type: "add_ai", stack: parseInt(stack), level: level }));
+        }
+        function takeAction(type, amount = null) {
+            const action = { type: type };
+            if (amount !== null) action.to_amount = parseInt(amount);
+            ws.send(JSON.stringify({ type: "act", action: action }));
+        }
+
+        function formatCard(c) {
+            if (c === "??" || !c) return `<div class="card">?</div>`;
+            const suit = c.slice(-1);
+            const val = c.slice(0, -1);
+            const suitClass = (suit === 'h' || suit === 'd') ? 'suit-h' : '';
+            const suitIcon = { 's': '♠', 'h': '♥', 'd': '♦', 'c': '♣' }[suit] || suit;
+            return `<div class="card ${suitClass}">${val}${suitIcon}</div>`;
+        }
+
+        function updateUI(data) {
+            const pub = data.public;
+            
+            // 视图自动切换逻辑
+            // 只有当从大厅刚进入，或者当前不在游戏/设置页时，才根据状态切换
+            const isLobby = document.getElementById('lobbyView').classList.contains('active');
+            const isGame = document.getElementById('gameView').classList.contains('active');
+            const isSetup = document.getElementById('setupView').classList.contains('active');
+
+            if (isLobby) {
+                // 如果还在大厅，连接成功后会切换，这里不强制
+            } else if (pub.street !== "HAND_OVER") {
+                if (!isGame) showView('gameView');
+            } else {
+                // HAND_OVER 状态：如果已经在游戏页，就不跳走
+                if (!isGame && !isSetup) showView('setupView');
+            }
+
+            // 1. 设置页面的玩家列表
+            const readyPlayers = new Set(data.ready || []);
+            const readyNames = pub.seats.filter(s => readyPlayers.has(s.player_id)).map(s => s.name);
+            
+            document.getElementById('playerList').innerHTML = pub.seats.map(s => `
+                <span class="player-tag">
+                    ${s.name} ${readyPlayers.has(s.player_id) ? '✅' : '⏳'}
+                </span>
+            `).join('');
+
+            // 2. 游戏页面更新
+            document.getElementById('displayStreet').innerText = pub.street;
+            document.getElementById('displayPot').innerText = pub.pot_total;
+            document.getElementById('gameReadyList').innerText = readyNames.length > 0 ? ("已准备: " + readyNames.join(', ')) : "";
+            document.getElementById('board').innerHTML = pub.board.map(formatCard).join('');
+
+            const seatsDiv = document.getElementById('seatsList');
+            seatsDiv.innerHTML = pub.seats.map((s, idx) => {
+                let role = '';
+                if (idx === pub.button) role += ' [D]';
+                if (idx === pub.sb_pos) role += ' [SB]';
+                if (idx === pub.bb_pos) role += ' [BB]';
+
+                // 底牌显示逻辑：
+                // 1. 如果是摊牌阶段(s.hole里有明牌数据)，显示明牌
+                // 2. 如果是自己的座位，显示自己的底牌(data.your_hole)
+                // 3. 否则显示背面(??)
+                let displayCards = s.hole;
+                if (idx === data.your_seat && data.your_hole && data.your_hole.length > 0 && (!s.hole || s.hole[0] === "??")) {
+                    displayCards = data.your_hole;
+                }
+
+                let holeHtml = '';
+                if (displayCards && displayCards.length > 0) {
+                    holeHtml = `<div style="margin-top:8px;">${displayCards.map(formatCard).join('')}`;
+                    if (s.hand_type) {
+                        holeHtml += `<span style="margin-left:8px; color:#1890ff; font-weight:bold; font-size:12px; background:#e6f7ff; padding:2px 6px; border-radius:4px; border:1px solid #91d5ff;">${s.hand_type}</span>`;
+                    }
+                    if (s.best_5 && s.best_5.length > 0) {
+                        holeHtml += `<div style="margin-top:5px; font-size:11px; color:#888;">最佳5张: ${s.best_5.map(c => `<span style="margin-right:2px; display:inline-block; border:1px solid #ccc; padding:0 2px; border-radius:2px; background:#fff; min-width:20px; text-align:center;">${c}</span>`).join('')}</div>`;
+                    }
+                    holeHtml += `</div>`;
+                }
+
+                return `
+                    <div class="seat ${pub.to_act === idx ? 'active' : ''}">
+                        <div style="display:flex; justify-content:space-between">
+                            <strong>${s.name} <span style="color:#1890ff">${role}</span></strong>
+                            <div>
+                                <span style="font-size:12px; color:${s.total_profit >= 0 ? '#52c41a' : '#ff4d4f'}; margin-right:5px;">
+                                    ${s.total_profit >= 0 ? '+' : ''}${s.total_profit}
+                                </span>
+                                💰${s.stack}
+                            </div>
+                        </div>
+                        <div style="font-size:12px; color:#666; margin-top:5px;">
+                            本轮投入: ${s.contributed_round} | ${s.in_hand ? (s.all_in ? 'ALL-IN' : '进行中') : '已弃牌'}
+                        </div>
+                        ${holeHtml}
+                    </div>
+                `;
+            }).join('');
+
+            // 我的手牌和操作
+            document.getElementById('myHole').innerHTML = data.your_hole.map(formatCard).join('');
+            
+            const controls = document.getElementById('actionControls');
+            const raiseBox = document.getElementById('raiseBox');
+            controls.innerHTML = '';
+            raiseBox.style.display = 'none';
+
+            data.legal_actions.forEach(act => {
+                const btn = document.createElement('button');
+                btn.innerText = act.type;
+                if (act.type === 'ALL_IN') {
+                    btn.className = 'danger';
+                    btn.style.fontWeight = 'bold';
+                    btn.onclick = () => takeAction('ALL_IN');
+                } else {
+                    btn.onclick = () => {
+                        if (act.type === 'RAISE' || act.type === 'BET') {
+                            const amt = document.getElementById('raiseAmount').value;
+                            takeAction(act.type, amt || act.min_to);
+                        } else {
+                            takeAction(act.type);
+                        }
+                    };
+                }
+                controls.appendChild(btn);
+
+                if (act.type === 'RAISE' || act.type === 'BET') {
+                    raiseBox.style.display = 'block';
+                    document.getElementById('raiseAmount').value = act.min_to;
+                    document.getElementById('raiseHint').innerText = `范围: ${act.min_to} - ${act.max_to}`;
+                }
+            });
+
+            // 如果是局后结算阶段，添加快速开始按钮
+            if (pub.street === "HAND_OVER" && isGame) {
+                // 检查是否有玩家筹码为0
+                const brokePlayer = pub.seats.find(s => s.stack <= 0);
+                
+                if (brokePlayer) {
+                    const warnDiv = document.createElement('div');
+                    warnDiv.style.color = '#faad14';
+                    warnDiv.style.padding = '10px';
+                    warnDiv.style.background = '#fffbe6';
+                    warnDiv.style.border = '1px solid #ffe58f';
+                    warnDiv.style.borderRadius = '4px';
+                    warnDiv.style.marginBottom = '10px';
+                    warnDiv.style.width = '100%';
+                    warnDiv.innerHTML = `⚠️ 玩家 <b>${brokePlayer.name}</b> 筹码已用尽，系统正在询问其是否贷款继续游戏。`;
+                    controls.appendChild(warnDiv);
+                }
+
+                const nextBtn = document.createElement('button');
+                nextBtn.innerText = "下一局 (快速开始)";
+                nextBtn.className = "secondary";
+                nextBtn.style.fontWeight = "bold";
+                nextBtn.onclick = sendReady;
+                controls.appendChild(nextBtn);
+
+                const setupBtn = document.createElement('button');
+                setupBtn.innerText = "返回设置页";
+                setupBtn.onclick = () => showView('setupView');
+                controls.appendChild(setupBtn);
+            }
+
+            // 日志
+            if (pub.history) {
+                const logHtml = pub.history.slice(-15).map(h => {
+                    if (h.action === "SHOWDOWN") {
+                        let res = `<div style="color: #ff9c6e; border-bottom: 1px solid #555; padding: 5px 0;">【比牌结算】</div>`;
+                        h.results.forEach(r => {
+                            const profit = r.won - r.lost;
+                            const color = profit > 0 ? "#52c41a" : (profit < 0 ? "#ff4d4f" : "#aaa");
+                            const sign = profit > 0 ? "+" : "";
+                            res += `<div style="font-size: 11px; margin-left: 5px;">
+                                ${r.name}: <span style="color:${color}">${r.hand_type} (${sign}${profit})</span>
+                                <small style="color:#777">[${r.hole.join('')}]</small>
+                            </div>`;
+                        });
+                        return res;
+                    }
+                    if (h.action === "WIN_NO_SHOWDOWN") {
+                        let res = `<div style="color: #ff9c6e; border-bottom: 1px solid #555; padding: 5px 0;">【收池结算】</div>`;
+                        h.results.forEach(r => {
+                            const profit = r.won - r.lost;
+                            if (profit !== 0) {
+                                const color = profit > 0 ? "#52c41a" : "#ff4d4f";
+                                const sign = profit > 0 ? "+" : "";
+                                res += `<div style="font-size: 11px; margin-left: 5px;">
+                                    ${r.name}: <span style="color:${color}">${sign}${profit}</span>
+                                </div>`;
+                            }
+                        });
+                        return res;
+                    }
+                    
+                    let m = h.name ? `<b>${h.name}</b> ` : "";
+                    m += h.action;
+                    if (h.to_amount) m += ` -> ${h.to_amount}`;
+                    if (h.amount) m += ` 🏆${h.amount}`;
+                    return `<div style="margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:2px;">${m}</div>`;
+                }).join('');
+                document.getElementById('log').innerHTML = logHtml;
+                const logObj = document.getElementById('log');
+                logObj.scrollTop = logObj.scrollHeight;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+.env
+
+# 编辑器设置
+.vscode/
+.cursor/
+.idea/
+
+# 日志文件
+*.log
+
+# 模型备份（可选，只保留最新的）
+models/poker_rl_ep*.pth
+# models/ # 如果模型非常大且频繁变动，也可以选择忽略整个文件夹，但建议保留 poker_rl_latest.pth
+
