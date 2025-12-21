@@ -195,6 +195,7 @@ class Seat:
     player_id: str
     name: str
     stack: int
+    is_ai: bool = False
     in_hand: bool = True
     all_in: bool = False
     contributed_total: int = 0
@@ -268,6 +269,7 @@ class GameState:
                 "player_id": s.player_id,
                 "name": s.name,
                 "stack": s.stack,
+                "is_ai": s.is_ai,
                 "in_hand": s.in_hand,
                 "all_in": s.all_in,
                 "contributed_total": s.contributed_total,
@@ -1010,7 +1012,7 @@ class Room:
             
         # assign seat
         seat_idx = len(self.state.seats)
-        self.state.seats.append(Seat(player_id=player_id, name=name, stack=stack, hole=[]))
+        self.state.seats.append(Seat(player_id=player_id, name=name, stack=stack, is_ai=is_ai, hole=[]))
         self.player_seat[player_id] = seat_idx
         if is_ai:
             if level == "hard":
@@ -1400,6 +1402,12 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
                             return
                     await broadcast_room(room)
                     await room.check_ai_turn()
+
+                elif t == "kick_ai":
+                    ai_id = msg.get("ai_id")
+                    if ai_id and ai_id in room.ai_agents:
+                        await room.remove_player(ai_id, reason="被房主踢出")
+                        await broadcast_room(room)
 
                 elif t == "ping":
                     await send_json(ws, {"type": "pong"})

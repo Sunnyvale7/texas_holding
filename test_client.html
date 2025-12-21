@@ -23,7 +23,9 @@
         button.danger { background: #ff4d4f; }
 
         /* 设置页面样式 */
-        .player-tag { background: #f5f5f5; padding: 8px 12px; border-radius: 20px; display: inline-block; margin: 5px; border: 1px solid #eee; }
+        .player-tag { background: #f5f5f5; padding: 8px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; margin: 5px; border: 1px solid #eee; }
+        .kick-btn { color: #ff4d4f; cursor: pointer; font-weight: bold; font-size: 16px; line-height: 1; border: none; background: none; padding: 0 4px; border-radius: 50%; transition: background 0.2s; }
+        .kick-btn:hover { background: rgba(255, 77, 79, 0.1); }
         .config-box { background: #fafafa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee; }
 
         /* 游戏页面样式 */
@@ -241,8 +243,9 @@
                 </div>
             </div>
 
-            <div style="text-align: center; margin-top: 30px;">
+            <div style="text-align: center; margin-top: 30px; display: flex; justify-content: center; gap: 20px;">
                 <button style="width: 200px; font-size: 18px;" onclick="sendReady()">我准备好了！</button>
+                <button class="danger" style="width: 150px; font-size: 18px;" onclick="leaveRoom()">退出房间</button>
             </div>
         </div>
 
@@ -434,6 +437,9 @@
             const level = document.getElementById('aiLevel').value;
             ws.send(JSON.stringify({ type: "add_ai", stack: parseInt(stack), level: level }));
         }
+        function kickAI(aiId) {
+            ws.send(JSON.stringify({ type: "kick_ai", ai_id: aiId }));
+        }
         function takeAction(type, amount = null) {
             const action = { type: type };
             if (amount !== null) action.to_amount = parseInt(amount);
@@ -474,6 +480,7 @@
             document.getElementById('playerList').innerHTML = pub.seats.map(s => `
                 <span class="player-tag">
                     ${s.name} ${readyPlayers.has(s.player_id) ? '✅' : '⏳'}
+                    ${s.is_ai ? `<button class="kick-btn" title="踢出机器人" onclick="kickAI('${s.player_id}')">×</button>` : ''}
                 </span>
             `).join('');
 
