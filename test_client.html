@@ -275,35 +275,30 @@
                 showView('setupView');
                 document.getElementById('setupTitle').innerText = `房间: ${rid}`;
                 
-                // 延迟发送 join，给网络缓冲区一点时间就绪
+                // 延迟发送 join，确保通道完全就绪
                 setTimeout(() => {
-                    const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
-                    console.log("[DEBUG] WebSocket 已连接, 发送 join 消息:", joinMsg);
-                    ws.send(joinMsg);
-                }, 200);
+                    if (ws.readyState === WebSocket.OPEN) {
+                        const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
+                        console.log("[DEBUG] 发送 join 消息:", joinMsg);
+                        ws.send(joinMsg);
+                    }
+                }, 300);
             };
 
             ws.onmessage = (event) => {
                 console.log("[DEBUG] 收到服务器消息:", event.data.substring(0, 100) + "...");
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === "state") {
-                        // 只有当存在 public 字段时才更新 UI
-                        if (data.public) {
-                            updateUI(data);
-                        } else {
-                            console.log("[DEBUG] 收到非 UI 状态消息:", data);
-                        }
-                    } else if (data.type === "loan_request") {
-                        showLoanModal(data.message);
-                    } else if (data.type === "game_summary") {
-                        showSummaryModal(data.summary);
-                    } else if (data.type === "error") {
-                        console.error("[DEBUG] 服务器返回错误:", data.message);
-                        alert(data.message);
+                const data = JSON.parse(event.data);
+                if (data.type === "state") {
+                    if (data.public) {
+                        updateUI(data);
                     }
-                } catch (e) {
-                    console.error("[DEBUG] 解析消息失败:", e);
+                } else if (data.type === "loan_request") {
+                    showLoanModal(data.message);
+                } else if (data.type === "game_summary") {
+                    showSummaryModal(data.summary);
+                } else if (data.type === "error") {
+                    console.error("[DEBUG] 服务器返回错误:", data.message);
+                    alert(data.message);
                 }
             };
 
