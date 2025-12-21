@@ -97,13 +97,13 @@
 
         /* 玩家座位 */
         .seat {
-            position: absolute; width: 160px; padding: 12px;
-            background: rgba(15, 23, 42, 0.9); border-radius: 16px;
+            position: absolute; width: 185px; padding: 15px;
+            background: rgba(15, 23, 42, 0.95); border-radius: 20px;
             border: 2px solid transparent; transition: all 0.3s;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
             transform: translate(-50%, -50%);
         }
-        .seat.active { border-color: var(--accent-blue); box-shadow: 0 0 20px rgba(56,189,248,0.4); z-index: 20; }
+        .seat.active { border-color: var(--accent-blue); box-shadow: 0 0 25px rgba(56,189,248,0.5); z-index: 20; }
         .seat.folded { opacity: 0.6; filter: grayscale(0.8); }
         .seat.winner-highlight { border-color: var(--accent-gold); animation: winnerGlow 1.5s infinite alternate; }
         @keyframes winnerGlow { from { box-shadow: 0 0 10px var(--accent-gold); } to { box-shadow: 0 0 30px var(--accent-gold); } }
@@ -120,14 +120,15 @@
             border: 1px dashed rgba(255,255,255,0.4); left: 0;
         }
 
-        /* 庄位/盲注圆盘 */
+        /* 庄位/盲注圆盘 (锚定在方框角落) */
         .blind-marker {
-            position: absolute; width: 45px; height: 45px; border-radius: 50%;
+            position: absolute; width: 36px; height: 36px; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
-            font-size: 8px; font-weight: bold; text-transform: uppercase;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.6); z-index: 15;
-            transform: translate(-50%, -50%); border: 2px solid rgba(0,0,0,0.2);
-            text-align: center; line-height: 1.1; padding: 4px; box-sizing: border-box;
+            font-size: 9px; font-weight: bold; text-transform: uppercase;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 35;
+            top: -15px; right: -15px; /* 挂在右上角 */
+            border: 2px solid rgba(255,255,255,0.2);
+            text-align: center; line-height: 1; padding: 2px; box-sizing: border-box;
         }
         .marker-dealer { background: #ffffff; color: #333; }
         .marker-sb { background: #fbbf24; color: #000; }
@@ -419,13 +420,22 @@
                 seatDiv.className = `seat ${isToAct?'active':''} ${!s.in_hand?'folded':''} ${winnerSeats.has(i)?'winner-highlight':''}`;
                 seatDiv.style.left = `${posX}%`; seatDiv.style.top = `${posY}%`;
                 
-                // 绘制圆盘
-                const mRx = rx * 0.72, mRy = ry * 0.68;
-                const mX = 50 + mRx * Math.cos(angle), mY = 50 + mRy * Math.sin(angle);
-
-                if (i === pub.button) addMarker(container, 'marker-dealer', 'Dealer', mX, mY);
-                if (i === pub.sb_pos) addMarker(container, 'marker-sb', 'Small<br>Blind', mX, mY);
-                if (i === pub.bb_pos) addMarker(container, 'marker-bb', 'Big<br>Blind', mX, mY);
+                // 绘制圆盘标记 (直接附加在 seatDiv 上)
+                if (i === pub.button) {
+                    const m = document.createElement('div');
+                    m.className = 'blind-marker marker-dealer'; m.innerHTML = 'D';
+                    seatDiv.appendChild(m);
+                }
+                if (i === pub.sb_pos) {
+                    const m = document.createElement('div');
+                    m.className = 'blind-marker marker-sb'; m.innerHTML = 'SB';
+                    seatDiv.appendChild(m);
+                }
+                if (i === pub.bb_pos) {
+                    const m = document.createElement('div');
+                    m.className = 'blind-marker marker-bb'; m.innerHTML = 'BB';
+                    seatDiv.appendChild(m);
+                }
 
                 let cards = (i === myIdx ? data.your_hole : s.hole) || [];
                 seatDiv.innerHTML = `
