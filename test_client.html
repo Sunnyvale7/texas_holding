@@ -34,6 +34,48 @@
         .log { height: 200px; overflow-y: auto; background: #1e1e1e; color: #aaa; padding: 10px; font-family: monospace; font-size: 11px; border-radius: 4px; margin-top: 10px; }
         .seat { border: 2px solid #eee; padding: 12px; margin-bottom: 10px; border-radius: 8px; position: relative; transition: all 0.3s; }
         .seat.active { border-color: #1890ff; background: #e6f7ff; transform: scale(1.02); }
+        .seat.folded { opacity: 0.5; background: #f0f0f0; filter: grayscale(80%); }
+        .seat.winner-highlight { border-color: #52c41a; background: #f6ffed; box-shadow: 0 0 15px rgba(82, 196, 26, 0.4); animation: pulse-winner 2s infinite; }
+        
+        @keyframes pulse-winner {
+            0% { transform: scale(1.02); box-shadow: 0 0 10px rgba(82, 196, 26, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(82, 196, 26, 0.6); }
+            100% { transform: scale(1.02); box-shadow: 0 0 10px rgba(82, 196, 26, 0.4); }
+        }
+
+        .winner-banner { 
+            display: none; 
+            background: #52c41a; 
+            color: white; 
+            padding: 10px; 
+            border-radius: 8px; 
+            text-align: center; 
+            margin-bottom: 15px; 
+            font-weight: bold; 
+            font-size: 1.2em;
+            animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .active-players-count {
+            background: #fff1f0;
+            color: #f5222d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            border: 1px solid #ffa39e;
+        }
+
+        .turn-info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
         .card { display: inline-block; width: 35px; height: 50px; border: 1px solid #333; border-radius: 4px; text-align: center; line-height: 50px; margin-right: 4px; background: white; font-weight: bold; font-size: 14px; box-shadow: 1px 1px 3px rgba(0,0,0,0.2); }
         .suit-h, .suit-d { color: #f5222d; }
         .controls { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -206,10 +248,13 @@
 
         <!-- 3. 游戏视图 -->
         <div id="gameView" class="view">
+            <div id="winnerBanner" class="winner-banner"></div>
             <div class="game-header">
                 <div>
                     <strong id="displayStreet">PREFLOP</strong> | 
                     底池: <span id="displayPot" style="color: #52c41a; font-size: 1.2em;">0</span>
+                    <span id="activePlayers" class="active-players-count" style="margin-left: 10px;">在场: 0人</span>
+                    <div id="turnInfo" class="turn-info"></div>
                     <span id="gameReadyList" style="margin-left:20px; font-size: 12px; color: #666;"></span>
                 </div>
                 <div style="display: flex; gap: 8px;">
@@ -438,6 +483,61 @@
             document.getElementById('gameReadyList').innerText = readyNames.length > 0 ? ("已准备: " + readyNames.join(', ')) : "";
             document.getElementById('board').innerHTML = pub.board.map(formatCard).join('');
 
+            // 显示在场人数
+            const activeCount = pub.seats.filter(s => s.in_hand).length;
+            document.getElementById('activePlayers').innerText = "在场: " + activeCount + "人";
+
+            // 显示轮次信息
+            const turnInfoDiv = document.getElementById('turnInfo');
+            if (pub.street !== "HAND_OVER") {
+                const currentPlayer = pub.seats[pub.to_act];
+                let nextPlayerStr = "";
+                
+                // 寻找下一个行动者
+                let nextIdx = (pub.to_act + 1) % pub.seats.length;
+                for (let i = 0; i < pub.seats.length; i++) {
+                    const s = pub.seats[nextIdx];
+                    if (s.in_hand && !s.all_in) {
+                        nextPlayerStr = ` -> 接下来: ${s.name}`;
+                        break;
+                    }
+                    nextIdx = (nextIdx + 1) % pub.seats.length;
+                }
+                
+                const currentGap = pub.current_bet - currentPlayer.contributed_round;
+                const gapStr = currentGap > 0 ? " | <span style=\"color:#f5222d\">需补: " + currentGap + "</span>" : " | <span style=\"color:#52c41a\">已平池</span>";
+                
+                turnInfoDiv.innerHTML = "当前行动: <b>" + currentPlayer.name + "</b>" + gapStr + nextPlayerStr;
+            } else {
+                turnInfoDiv.innerHTML = "";
+            }
+
+            // 处理赢家显示
+            const winnerBanner = document.getElementById('winnerBanner');
+            winnerBanner.style.display = 'none';
+            let winnerSeats = new Set();
+            if (pub.street === "HAND_OVER" && pub.history && pub.history.length > 0) {
+                const lastHistory = pub.history[pub.history.length - 1];
+                if (lastHistory.action === "SHOWDOWN" || lastHistory.action === "WIN_NO_SHOWDOWN") {
+                    let winners = [];
+                    if (lastHistory.action === "WIN_NO_SHOWDOWN") {
+                        winners.push(lastHistory.winner);
+                        winnerSeats.add(lastHistory.winner_seat);
+                    } else if (lastHistory.results) {
+                        lastHistory.results.forEach(r => {
+                            if (r.won > 0) {
+                                winners.push(r.name);
+                                winnerSeats.add(r.seat);
+                            }
+                        });
+                    }
+                    if (winners.length > 0) {
+                        winnerBanner.innerText = `🏆 赢家: ${winners.join(', ')} 🏆`;
+                        winnerBanner.style.display = 'block';
+                    }
+                }
+            }
+
             const seatsDiv = document.getElementById('seatsList');
             seatsDiv.innerHTML = pub.seats.map((s, idx) => {
                 let role = '';
@@ -445,10 +545,7 @@
                 if (idx === pub.sb_pos) role += ' [SB]';
                 if (idx === pub.bb_pos) role += ' [BB]';
 
-                // 底牌显示逻辑：
-                // 1. 如果是摊牌阶段(s.hole里有明牌数据)，显示明牌
-                // 2. 如果是自己的座位，显示自己的底牌(data.your_hole)
-                // 3. 否则显示背面(??)
+                // 底牌显示逻辑
                 let displayCards = s.hole;
                 if (idx === data.your_seat && data.your_hole && data.your_hole.length > 0 && (!s.hole || s.hole[0] === "??")) {
                     displayCards = data.your_hole;
@@ -466,8 +563,17 @@
                     holeHtml += `</div>`;
                 }
 
+                const isToAct = pub.to_act === idx && pub.street !== "HAND_OVER";
+                const isFolded = !s.in_hand;
+                const isWinner = winnerSeats.has(idx);
+
+                let seatClasses = "seat";
+                if (isToAct) seatClasses += " active";
+                if (isFolded) seatClasses += " folded";
+                if (isWinner) seatClasses += " winner-highlight";
+
                 return `
-                    <div class="seat ${pub.to_act === idx ? 'active' : ''}">
+                    <div class="${seatClasses}">
                         <div style="display:flex; justify-content:space-between">
                             <strong>${s.name} <span style="color:#1890ff">${role}</span></strong>
                             <div>
@@ -477,8 +583,9 @@
                                 💰${s.stack}
                             </div>
                         </div>
-                        <div style="font-size:12px; color:#666; margin-top:5px;">
-                            本轮投入: ${s.contributed_round} | ${s.in_hand ? (s.all_in ? 'ALL-IN' : '进行中') : '已弃牌'}
+                        <div style="font-size:12px; color:#666; margin-top:5px; display: flex; justify-content: space-between;">
+                            <span>本轮投入: <b>${s.contributed_round}</b> <small>(总投入: ${s.contributed_total})</small></span>
+                            <span>${s.in_hand ? (s.all_in ? '<b style="color:#f5222d">ALL-IN</b>' : '<b style="color:#52c41a">进行中</b>') : '<b style="color:#bfbfbf">已弃牌</b>'}</span>
                         </div>
                         ${holeHtml}
                     </div>
@@ -496,6 +603,14 @@
             data.legal_actions.forEach(act => {
                 const btn = document.createElement('button');
                 btn.innerText = act.type;
+                
+                // 处理 CALL 按钮显示补钱数额
+                if (act.type === 'CALL') {
+                    const mySeat = pub.seats[data.your_seat];
+                    const toCall = pub.current_bet - mySeat.contributed_round;
+                    btn.innerText = `跟注 (需补: ${toCall})`;
+                }
+
                 if (act.type === 'ALL_IN') {
                     btn.className = 'danger';
                     btn.style.fontWeight = 'bold';
