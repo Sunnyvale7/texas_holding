@@ -271,12 +271,15 @@
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                ws.send(JSON.stringify({ type: "join", name: name, stack: parseInt(stack) }));
+                const joinMsg = JSON.stringify({ type: "join", name: name, stack: parseInt(stack) });
+                console.log("[DEBUG] WebSocket 已连接, 发送 join 消息:", joinMsg);
+                ws.send(joinMsg);
                 showView('setupView');
                 document.getElementById('setupTitle').innerText = `房间: ${rid}`;
             };
 
             ws.onmessage = (event) => {
+                console.log("[DEBUG] 收到服务器消息:", event.data.substring(0, 100) + "...");
                 const data = JSON.parse(event.data);
                 if (data.type === "state") {
                     updateUI(data);
@@ -285,13 +288,19 @@
                 } else if (data.type === "game_summary") {
                     showSummaryModal(data.summary);
                 } else if (data.type === "error") {
+                    console.error("[DEBUG] 服务器返回错误:", data.message);
                     alert(data.message);
                 }
             };
 
-            ws.onclose = () => {
+            ws.onerror = (err) => {
+                console.error("[DEBUG] WebSocket 发生错误:", err);
+            };
+
+            ws.onclose = (event) => {
+                console.warn("[DEBUG] WebSocket 已关闭:", event.code, event.reason);
                 if (!isIntentionalLeave) {
-                    alert("连接已断开");
+                    alert("连接已断开 (" + event.code + ")");
                     showView('lobbyView');
                 }
                 hideLoanModal();
