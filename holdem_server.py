@@ -1280,25 +1280,6 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
 
         while True:
             raw = await ws.receive_text()
-            msg = json.loads(raw)
-        name = msg.get("name", player_id)
-        stack = int(msg.get("stack", 2000))
-
-        async with room.lock:
-            if player_id not in room.player_seat:
-                try:
-                    room.add_player(player_id, name=name, stack=stack)
-                    print(f"[DEBUG] 玩家已加入座位: {name} ({player_id})")
-                except ValueError as e:
-                    print(f"[DEBUG] 加入玩家失败: {e}")
-                    await send_json(ws, {"type": "error", "message": str(e)})
-                    return
-
-            print(f"[DEBUG] 正在广播房间状态...")
-            await broadcast_room(room)
-
-        while True:
-            raw = await ws.receive_text()
             print(f"[DEBUG] 收到操作消息 ({player_id}): {raw}")
             msg = json.loads(raw)
 
