@@ -1249,7 +1249,16 @@ async def broadcast_room(room: Room):
 @app.websocket("/ws/{room_id}/{player_id}")
 async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
     await ws.accept()
-    print(f"[DEBUG] WebSocket 建立连接: room={room_id}, player={player_id}")
+    print(f"[DEBUG] WebSocket 握手成功: room={room_id}, player={player_id}")
+    
+    # --- 新增主动探测 ---
+    try:
+        await send_json(ws, {"type": "state", "message": "SERVER_HANDSHAKE_OK"})
+        print(f"[DEBUG] 已发送握手确认包给 {player_id}")
+    except Exception as e:
+        print(f"[DEBUG] 发送确认包失败: {e}")
+    # ------------------
+
     room = rooms.get(room_id)
     if room is None:
         room = rooms[room_id] = Room(room_id, sb=10, bb=20, seed=random.randint(0, 1000000))
@@ -1258,12 +1267,20 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
         room.connections[player_id] = ws
 
     try:
-        # wait join message
-        raw = await ws.receive_text()
-        print(f"[DEBUG] 收到初始消息 ({player_id}): {raw}")
-        msg = json.loads(raw)
+        # 使用更底层的 receive() 观察原始消息
+        message = await ws.receive()
+        print(f"[DEBUG] 收到原始消息类型 ({player_id}): {message.get('type')}")
+        
+        if message.get("type") == "websocket.receive":
+            raw = message.get("text")
+            print(f"[DEBUG] 收到文本内容: {raw}")
+            msg = json.loads(raw)
+        else:
+            print(f"[DEBUG] 收到非预期消息类型: {message}")
+            return
+
         if msg.get("type") != "join":
-            print(f"[DEBUG] 错误: 初始消息不是 join: {msg.get('type')}")
+            print(f"[DEBUG] 错误: 初始消息不是 join")
             await send_json(ws, {"type": "error", "message": "First message must be join"})
             return
         name = msg.get("name", player_id)
