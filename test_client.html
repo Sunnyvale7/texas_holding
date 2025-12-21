@@ -139,7 +139,17 @@
 </head>
 <body>
 
-    <div id="loanModal">
+    <!-- 看牌请求模态框 -->
+    <div id="seeRequestModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1200; justify-content: center; align-items: center;">
+        <div class="modal-content" style="max-width: 400px; width: 90%;">
+            <h3 style="margin-top:0">看牌请求</h3>
+            <p id="seeRequestMessage"></p>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+                <button onclick="respondSeeRequest(true)">同意 (收下筹码)</button>
+                <button class="danger" onclick="respondSeeRequest(false)">拒绝</button>
+            </div>
+        </div>
+    </div>
         <div class="modal-content">
             <h3 style="margin-top:0">筹码已用尽</h3>
             <p id="loanMessage"></p>
@@ -336,6 +346,11 @@
                     return;
                 }
                 
+                if (data.type === "see_request") {
+                    showSeeRequestModal(data.requester_name, data.amount);
+                    return;
+                }
+                
                 if (data.type === "state") {
                     if (data.public) {
                         updateUI(data);
@@ -367,6 +382,27 @@
         function showLoanModal(msg) {
             document.getElementById('loanMessage').innerText = msg;
             document.getElementById('loanModal').style.display = 'flex';
+        }
+
+        function showSeeRequestModal(name, amount) {
+            document.getElementById('seeRequestMessage').innerText = `玩家 ${name} 愿意支付 ${amount} 筹码看你的底牌，是否同意？`;
+            document.getElementById('seeRequestModal').style.display = 'flex';
+        }
+
+        function respondSeeRequest(accept) {
+            ws.send(JSON.stringify({ type: "respond_see_request", accept: accept }));
+            document.getElementById('seeRequestModal').style.display = 'none';
+        }
+
+        function requestSee(targetId) {
+            const amount = prompt("输入你愿意支付的筹码金额:", "50");
+            if (amount !== null && !isNaN(amount)) {
+                ws.send(JSON.stringify({ type: "request_see_cards", target_id: targetId, amount: parseInt(amount) }));
+            }
+        }
+
+        function showCards() {
+            ws.send(JSON.stringify({ type: "show_cards" }));
         }
 
         function showSummaryModal(summary) {
@@ -512,7 +548,8 @@
                 }
                 
                 const currentGap = pub.current_bet - currentPlayer.contributed_round;
-                const gapStr = currentGap > 0 ? " | <span style=\"color:#f5222d\">需补: " + currentGap + "</span>" : " | <span style=\"color:#52c41a\">已平池</span>";
+                const actualNeed = Math.min(currentPlayer.stack, currentGap);
+                const gapStr = currentGap > 0 ? " | <span style=\"color:#f5222d\">需补: " + actualNeed + (actualNeed < currentGap ? " (All-in)" : "") + "</span>" : " | <span style=\"color:#52c41a\">已平池</span>";
                 
                 turnInfoDiv.innerHTML = "当前行动: <b>" + currentPlayer.name + "</b>" + gapStr + nextPlayerStr;
             } else {
@@ -598,7 +635,8 @@
                     <div class="${seatClasses}">
                         <div style="display:flex; justify-content:space-between">
                             <strong>${s.name} <span style="color:#1890ff">${role}</span></strong>
-                            <div>
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                ${pub.street === 'HAND_OVER' && idx !== data.your_seat && !s.revealed && s.in_hand ? `<button style="padding: 2px 6px; font-size: 10px; background: #fa8c16;" onclick="requestSee('${s.player_id}')">想看牌</button>` : ''}
                                 <span style="font-size:12px; color:${s.total_profit >= 0 ? '#52c41a' : '#ff4d4f'}; margin-right:5px;">
                                     ${s.total_profit >= 0 ? '+' : ''}${s.total_profit}
                                 </span>
@@ -629,9 +667,12 @@
                 
                 // 处理 CALL 按钮显示补钱数额
                 if (act.type === 'CALL') {
-                    const mySeat = pub.seats[data.your_seat];
-                    const toCall = pub.current_bet - mySeat.contributed_round;
-                    btn.innerText = `CALL (Needing to add: ${toCall})`;
+                    btn.innerText = "CALL (" + act.to_amount + ")";
+                }
+                
+                if (act.type === 'MUCK') {
+                    btn.innerText = "认输 (MUCK)";
+                    btn.style.background = "#8c8c8c";
                 }
 
                 if (act.type === 'ALL_IN') {
@@ -686,6 +727,16 @@
                 setupBtn.innerText = "返回设置页";
                 setupBtn.onclick = () => showView('setupView');
                 controls.appendChild(setupBtn);
+
+                // 如果没秀过牌且是自己，显示秀牌按钮
+                const mySeat = pub.seats[data.your_seat];
+                if (mySeat && !mySeat.revealed) {
+                    const showBtn = document.createElement('button');
+                    showBtn.innerText = "秀出底牌 (Show)";
+                    showBtn.style.background = "#722ed1";
+                    showBtn.onclick = showCards;
+                    controls.appendChild(showBtn);
+                }
             }
 
             // 日志

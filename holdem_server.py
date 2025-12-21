@@ -175,6 +175,7 @@ class ActType(str, Enum):
     BET = "BET"
     RAISE = "RAISE"
     ALL_IN = "ALL_IN"
+    MUCK = "MUCK" # 新增：自愿认输不摊牌
 
 
 @dataclass
@@ -203,6 +204,7 @@ class Seat:
     hole: List[Card] = None
     acted_this_round: bool = False
     total_profit: int = 0
+    revealed: bool = False  # 新增：玩家是否自愿秀牌
 
     def reset_for_hand(self):
         self.in_hand = self.stack > 0
@@ -211,6 +213,7 @@ class Seat:
         self.contributed_round = 0
         self.hole = []
         self.acted_this_round = False
+        self.revealed = False
 
 
 def next_seat(i: int, n: int) -> int:
@@ -229,6 +232,7 @@ class GameState:
     sb: int = 1
     bb: int = 2
     street: Street = Street.HAND_OVER
+    showdown_occurred: bool = False  # 是否发生了摊牌
 
     # hand state
     deck: Optional[Deck] = None
@@ -261,7 +265,7 @@ class GameState:
         self.last_agg = None
 
     def to_public_state(self) -> Dict[str, Any]:
-        show_all_holes = self.street in (Street.SHOWDOWN, Street.HAND_OVER)
+        show_all_holes = self.street == Street.SHOWDOWN or (self.street == Street.HAND_OVER and self.showdown_occurred)
         
         seats_info = []
         for i, s in enumerate(self.seats):
@@ -275,11 +279,12 @@ class GameState:
                 "contributed_total": s.contributed_total,
                 "contributed_round": s.contributed_round,
                 "total_profit": s.total_profit,
+                "revealed": s.revealed,
             }
             
-            # 只有在摊牌或结束后，且玩家未弃牌时，才对所有人公开底牌
+            # 只有在摊牌或结束后，且玩家未弃牌时，才对所有人公开底牌；或者玩家选择了“秀牌”
             if s.hole:
-                if show_all_holes and s.in_hand:
+                if (show_all_holes and s.in_hand) or s.revealed:
                     info["hole"] = [str(c) for c in s.hole]
                     # 计算最佳五张和牌型名
                     seven = s.hole + (self.board or [])
@@ -335,10 +340,12 @@ class HoldemEngine:
         self.st.board = []
         self.st.pot_total = 0
         self.st.action_history = []
+        self.st.showdown_occurred = False
 
         # deal hole
         for i in alive:
             self.st.seats[i].hole = self.st.deck.deal(2)
+            self.st.seats[i].revealed = False
 
         # post blinds
         self._post_blinds()
@@ -410,6 +417,9 @@ class HoldemEngine:
         else:
             # can call (possibly all-in)
             acts.append(Action(ActType.CALL, to_amount=min(s.stack, to_call)))
+            # 只有在河牌圈且需要跟注时，才提供 MUCK 选项作为 Fold 的替代（为了仪式感）
+            if self.st.street == Street.RIVER:
+                acts.append(Action(ActType.MUCK))
             # can raise if has extra chips beyond call
             if s.stack > to_call:
                 min_to = self.st.current_bet + self.st.min_raise
@@ -459,6 +469,9 @@ class HoldemEngine:
         if action.type == ActType.FOLD:
             s.in_hand = False
             log()
+        elif action.type == ActType.MUCK:
+            s.in_hand = False
+            log({"action": "MUCK"}) # 记录为自愿认输
         elif action.type == ActType.CHECK:
             if to_call != 0:
                 raise ValueError("Cannot check when facing a bet")
@@ -615,6 +628,7 @@ class HoldemEngine:
             self._go_next_street()
 
     def _showdown(self):
+        self.st.showdown_occurred = True
         alive = self.st.alive_indices()
         # build side pots
         pots = build_side_pots(self.st.seats)
@@ -1002,6 +1016,7 @@ class Room:
         self.ai_agents: Dict[str, BaseAgent] = {} # player_id -> Agent
         self.ready: set[str] = set()
         self.max_seats = 9 # 设置最大人数为 9
+        self.see_requests: Dict[str, Dict[str, Any]] = {} # target_player_id -> {requester_id, amount}
 
         self.state = GameState(seats=[], sb=sb, bb=bb, button=0)
         self.engine = HoldemEngine(self.state, rng_seed=seed)
@@ -1407,6 +1422,80 @@ async def ws_endpoint(ws: WebSocket, room_id: str, player_id: str):
                     ai_id = msg.get("ai_id")
                     if ai_id and ai_id in room.ai_agents:
                         await room.remove_player(ai_id, reason="被房主踢出")
+                        await broadcast_room(room)
+
+                elif t == "show_cards":
+                    seat_idx = room.player_seat.get(player_id)
+                    if seat_idx is not None:
+                        room.state.seats[seat_idx].revealed = True
+                        room.state.action_history.append({
+                            "street": room.state.street.value,
+                            "action": "SYSTEM",
+                            "name": "系统",
+                            "extra": f"玩家 {room.state.seats[seat_idx].name} 大方地秀出了底牌！"
+                        })
+                        await broadcast_room(room)
+
+                elif t == "request_see_cards":
+                    target_id = msg.get("target_id")
+                    amount = int(msg.get("amount", 0))
+                    if target_id and target_id in room.player_seat and target_id != player_id:
+                        # 记录请求
+                        room.see_requests[target_id] = {"requester_id": player_id, "amount": amount}
+                        # 通知目标玩家
+                        target_ws = room.connections.get(target_id)
+                        if target_ws:
+                            requester_name = room.state.seats[room.player_seat[player_id]].name
+                            await send_json(target_ws, {
+                                "type": "see_request",
+                                "requester_id": player_id,
+                                "requester_name": requester_name,
+                                "amount": amount
+                            })
+                        # 日志
+                        room.state.action_history.append({
+                            "street": room.state.street.value,
+                            "action": "SYSTEM",
+                            "name": "系统",
+                            "extra": f"玩家 {room.state.seats[room.player_seat[player_id]].name} 想花 {amount} 筹码看一眼 {room.state.seats[room.player_seat[target_id]].name} 的牌"
+                        })
+                        await broadcast_room(room)
+
+                elif t == "respond_see_request":
+                    accept = msg.get("accept", False)
+                    request = room.see_requests.pop(player_id, None)
+                    if request and accept:
+                        requester_id = request["requester_id"]
+                        amount = request["amount"]
+                        
+                        target_idx = room.player_seat[player_id]
+                        requester_idx = room.player_seat.get(requester_id)
+                        
+                        if requester_idx is not None:
+                            # 转账
+                            actual_amt = min(amount, room.state.seats[requester_idx].stack)
+                            room.state.seats[requester_idx].stack -= actual_amt
+                            room.state.seats[requester_idx].total_profit -= actual_amt
+                            room.state.seats[target_idx].stack += actual_amt
+                            room.state.seats[target_idx].total_profit += actual_amt
+                            
+                            # 秀牌
+                            room.state.seats[target_idx].revealed = True
+                            
+                            room.state.action_history.append({
+                                "street": room.state.street.value,
+                                "action": "SYSTEM",
+                                "name": "系统",
+                                "extra": f"成交！{room.state.seats[target_idx].name} 收下钱展示了底牌"
+                            })
+                        await broadcast_room(room)
+                    elif request:
+                        room.state.action_history.append({
+                            "street": room.state.street.value,
+                            "action": "SYSTEM",
+                            "name": "系统",
+                            "extra": f"玩家 {room.state.seats[room.player_seat[player_id]].name} 拒绝了看牌请求"
+                        })
                         await broadcast_room(room)
 
                 elif t == "ping":
