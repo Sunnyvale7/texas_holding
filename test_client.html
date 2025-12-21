@@ -258,19 +258,6 @@
         let myPlayerId = "";
         let isIntentionalLeave = false;
 
-        // 座位坐标计算 (9人椭圆布局)
-        const SEAT_COORDS = [
-            { x: 50, y: 90 },  // 底部中央 (本人)
-            { x: 15, y: 75 },  // 左下
-            { x: 5, y: 50 },   // 左中
-            { x: 15, y: 25 },  // 左上
-            { x: 35, y: 10 },  // 顶部左
-            { x: 65, y: 10 },  // 顶部右
-            { x: 85, y: 25 },  // 右上
-            { x: 95, y: 50 },  // 右中
-            { x: 85, y: 75 },  // 右下
-        ];
-
         function showView(viewId) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(viewId).classList.add('active');
@@ -362,20 +349,33 @@
                 }
             } else { document.getElementById('winnerBanner').style.display = 'none'; }
 
-            // 4. 座位分布
+            // 4. 座位分布 (动态计算椭圆坐标)
             const container = document.getElementById('seatsContainer');
             container.innerHTML = "";
             const myIdx = data.your_seat || 0;
+            const totalSeats = pub.seats.length;
+
             pub.seats.forEach((s, i) => {
-                // 以玩家自己为底部中心，计算相对位置
-                const relativeIdx = (i - myIdx + 9) % 9;
-                const pos = SEAT_COORDS[relativeIdx];
+                // 以玩家自己为底部中心 (PI/2 弧度)，计算均匀分布的角度
+                const relativeIdx = (i - myIdx + totalSeats) % totalSeats;
+                
+                // 角度计算：PI/2 是正下方，顺时针增加角度
+                const angle = (Math.PI / 2) + (relativeIdx / totalSeats) * (Math.PI * 2);
+                
+                // 椭圆方程坐标：rx 是横向半径，ry 是纵向半径 (百分比)
+                // 增加半径使得方框更靠边缘
+                const rx = 48; 
+                const ry = 45;
+                const posX = 50 + rx * Math.cos(angle);
+                const posY = 50 + ry * Math.sin(angle);
+
                 const isToAct = pub.to_act === i && pub.street !== "HAND_OVER";
                 const res = seatResults[i];
                 
                 const seatDiv = document.createElement('div');
                 seatDiv.className = `seat ${isToAct?'active':''} ${!s.in_hand?'folded':''} ${winnerSeats.has(i)?'winner-highlight':''}`;
-                seatDiv.style.left = `${pos.x}%`; seatDiv.style.top = `${pos.y}%`;
+                seatDiv.style.left = `${posX}%`; 
+                seatDiv.style.top = `${posY}%`;
                 
                 let role = i === pub.button ? 'D' : (i === pub.sb_pos ? 'SB' : (i === pub.bb_pos ? 'BB' : ''));
                 let cards = (i === data.your_seat ? data.your_hole : s.hole) || [];
