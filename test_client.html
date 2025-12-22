@@ -568,9 +568,9 @@
                         status = '❌ 输';
                     }
                     
-                    // 最佳五张：只有摊牌且未弃牌的玩家才有
-                    const bestCards = (r.best_hand && r.best_hand.length > 0) ? r.best_hand.map(formatMiniCard).join('') : '-';
-                    const holeCards = (r.hole && r.hole.length > 0) ? r.hole.map(formatMiniCard).join('') : '-';
+                    // 弃牌玩家不显示手牌和最佳五张
+                    const bestCards = (!isFolded && r.best_hand && r.best_hand.length > 0) ? r.best_hand.map(formatMiniCard).join('') : '-';
+                    const holeCards = (!isFolded && r.hole && r.hole.length > 0) ? r.hole.map(formatMiniCard).join('') : (isFolded ? '🂠🂠' : '-');
                     const handType = (lastAction.action === "WIN_NO_SHOWDOWN" || isFolded) ? "未摊牌" : (r.hand_type || '-');
                     html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <td style="padding:8px; font-weight:bold;">${r.name}</td>

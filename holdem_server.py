@@ -652,6 +652,7 @@ class HoldemEngine:
             hand_names[i] = HAND_CATEGORIES.get(v[0], "未知")
             _, best_cards = get_best_hand(seven)
             best_hands[i] = best_cards
+            print(f"[DEBUG] Player {i}: seven={[str(c) for c in seven]}, best_cards={best_cards}")
 
 
         # 2. 构建并分配边池
