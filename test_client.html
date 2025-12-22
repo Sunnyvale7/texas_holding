@@ -522,10 +522,17 @@
 
             // 局结束弹窗
             if (pub.street === "HAND_OVER" && pub.history?.length && !window.handResultShown) {
-                const last = pub.history[pub.history.length - 1];
-                if (["SHOWDOWN", "WIN_NO_SHOWDOWN"].includes(last.action)) {
+                // 从后往前搜索 SHOWDOWN 或 WIN_NO_SHOWDOWN 记录
+                let settlementRecord = null;
+                for (let i = pub.history.length - 1; i >= 0; i--) {
+                    if (["SHOWDOWN", "WIN_NO_SHOWDOWN"].includes(pub.history[i].action)) {
+                        settlementRecord = pub.history[i];
+                        break;
+                    }
+                }
+                if (settlementRecord) {
                     window.handResultShown = true;
-                    showHandResultModal(last, pub.seats, pub.board, myIdx);
+                    showHandResultModal(settlementRecord, pub.seats, pub.board, myIdx);
                 }
             }
             if (pub.street !== "HAND_OVER") {
