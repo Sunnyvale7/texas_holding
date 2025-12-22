@@ -525,7 +525,7 @@
                 const last = pub.history[pub.history.length - 1];
                 if (["SHOWDOWN", "WIN_NO_SHOWDOWN"].includes(last.action)) {
                     window.handResultShown = true;
-                    showHandResultModal(last, pub.seats, pub.board);
+                    showHandResultModal(last, pub.seats, pub.board, myIdx);
                 }
             }
             if (pub.street !== "HAND_OVER") {
@@ -533,7 +533,7 @@
             }
         }
 
-        function showHandResultModal(lastAction, seats, board) {
+        function showHandResultModal(lastAction, seats, board, myIdx) {
             let html = `<div style="margin-bottom: 15px; text-align:center;">
                 <span style="color:#94a3b8">公共牌:</span> 
                 ${board.map(formatMiniCard).join('')}
@@ -554,6 +554,7 @@
                     const profitColor = profit > 0 ? '#4ade80' : (profit < 0 ? '#f87171' : '#94a3b8');
                     // 判断是否弃牌：r.folded 为真值，或者在 WIN_NO_SHOWDOWN 时非赢家
                     const isFolded = !!r.folded || (lastAction.action === "WIN_NO_SHOWDOWN" && !r.won);
+                    const isMe = r.seat === myIdx;
                     
                     // 状态判断：赢家 > 弃牌 > 平局 > 输
                     let status;
@@ -564,16 +565,28 @@
                     } else if (profit === 0 && r.won > 0) {
                         status = '🤝 平局';
                     } else {
-                        // 只有摊牌后输了才算输（folded=false 且 profit<0）
                         status = '❌ 输';
                     }
                     
-                    // 弃牌玩家不显示手牌和最佳五张
+                    // 手牌显示逻辑：
+                    // - 自己的牌总是显示
+                    // - 摊牌玩家的牌显示
+                    // - 其他弃牌玩家显示牌背
+                    let holeCards;
+                    if (isMe || !isFolded) {
+                        holeCards = (r.hole && r.hole.length > 0) ? r.hole.map(formatMiniCard).join('') : '-';
+                    } else {
+                        holeCards = `<div class="card mini back">?</div><div class="card mini back">?</div>`;
+                    }
+                    
+                    // 最佳五张：只有摊牌玩家才有
                     const bestCards = (!isFolded && r.best_hand && r.best_hand.length > 0) ? r.best_hand.map(formatMiniCard).join('') : '-';
-                    const holeCards = (!isFolded && r.hole && r.hole.length > 0) ? r.hole.map(formatMiniCard).join('') : (isFolded ? '🂠🂠' : '-');
                     const handType = (lastAction.action === "WIN_NO_SHOWDOWN" || isFolded) ? "未摊牌" : (r.hand_type || '-');
-                    html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <td style="padding:8px; font-weight:bold;">${r.name}</td>
+                    
+                    // 自己的行高亮
+                    const rowStyle = isMe ? 'background: rgba(56,189,248,0.15);' : '';
+                    html += `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1); ${rowStyle}">
+                        <td style="padding:8px; font-weight:bold;">${r.name}${isMe ? ' (你)' : ''}</td>
                         <td style="padding:8px; text-align:center;">${status}</td>
                         <td style="padding:8px; text-align:center;">${holeCards}</td>
                         <td style="padding:8px; text-align:center;">${bestCards}</td>
