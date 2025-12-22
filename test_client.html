@@ -278,8 +278,69 @@
                 <button onclick="closeHandResult()" style="width: auto; padding: 12px 40px;">确认</button>
             </div>
         </div>
+                </div>
+    <div id="rulesModal" class="modal" onclick="event.target === this && toggleRules(false)">
+        <div class="modal-content" style="text-align: left; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+            <h2 style="text-align: center; margin-bottom: 20px;">📖 德州扑克规则</h2>
+            
+            <h4 style="color: var(--accent-gold); margin-top: 15px;">🎴 牌型大小（从大到小）</h4>
+            <ol style="margin: 10px 0; padding-left: 20px; line-height: 1.8;">
+                <li><b>皇家同花顺</b> - A K Q J 10 同花色</li>
+                <li><b>同花顺</b> - 五张连续同花色</li>
+                <li><b>四条</b> - 四张相同点数</li>
+                <li><b>葫芦</b> - 三条 + 一对</li>
+                <li><b>同花</b> - 五张同花色</li>
+                <li><b>顺子</b> - 五张连续点数</li>
+                <li><b>三条</b> - 三张相同点数</li>
+                <li><b>两对</b> - 两个不同的对子</li>
+                <li><b>一对</b> - 两张相同点数</li>
+                <li><b>高牌</b> - 以上都没有，比最大单牌</li>
+            </ol>
+            
+            <h4 style="color: var(--accent-blue); margin-top: 20px;">🎯 位置与盲注</h4>
+            <ul style="margin: 10px 0; padding-left: 20px; line-height: 1.8;">
+                <li><b>庄家位 (Dealer/D)</b> - 白色圆盘标记，每局顺时针轮换</li>
+                <li><b>小盲注 (Small Blind/SB)</b> - 庄家左手边第一位，强制下注一半盲注</li>
+                <li><b>大盲注 (Big Blind/BB)</b> - 庄家左手边第二位，强制下注完整盲注</li>
+                <li>翻牌后，小盲注位置先行动</li>
+            </ul>
+            
+            <h4 style="color: var(--accent-green); margin-top: 20px;">🃏 游戏流程</h4>
+            <ul style="margin: 10px 0; padding-left: 20px; line-height: 1.8;">
+                <li><b>翻牌前 (Preflop)</b> - 发两张底牌，从大盲注左手边开始下注</li>
+                <li><b>翻牌 (Flop)</b> - 发三张公共牌</li>
+                <li><b>转牌 (Turn)</b> - 发第四张公共牌</li>
+                <li><b>河牌 (River)</b> - 发第五张公共牌</li>
+                <li><b>摊牌 (Showdown)</b> - 剩余玩家比较牌力，最强者赢得底池</li>
+            </ul>
+            
+            <h4 style="color: var(--accent-red); margin-top: 20px;">💰 All-In 规则</h4>
+            <ul style="margin: 10px 0; padding-left: 20px; line-height: 1.8;">
+                <li>当筹码不足以跟注时，可以选择 <b>All-In</b> 押上全部筹码</li>
+                <li>All-In 后无需再行动，等待摊牌</li>
+                <li><b>边池机制</b>：如果有人 All-In 后还有人继续加注，会形成边池
+                    <ul style="margin-top: 5px;">
+                        <li>主池：All-In 玩家可参与争夺</li>
+                        <li>边池：仅未 All-In 的玩家可参与</li>
+                    </ul>
+                </li>
+                <li>多人 All-In 时，按投入金额形成多个边池</li>
+            </ul>
+            
+            <h4 style="color: #a855f7; margin-top: 20px;">⚡ 行动选项</h4>
+            <ul style="margin: 10px 0; padding-left: 20px; line-height: 1.8;">
+                <li><b>弃牌 (Fold)</b> - 放弃本局，损失已投入筹码</li>
+                <li><b>过牌 (Check)</b> - 不下注，轮到下家（无人下注时可用）</li>
+                <li><b>跟注 (Call)</b> - 补齐与当前最高注相同的筹码</li>
+                <li><b>下注 (Bet)</b> - 第一个下注（本轮无人下注时）</li>
+                <li><b>加注 (Raise)</b> - 在已有下注基础上增加（最小加注为上次加注额）</li>
+            </ul>
+            
+            <div style="text-align: center; margin-top: 25px;">
+                <button onclick="toggleRules(false)" style="width: auto; padding: 12px 40px;">我知道了</button>
+            </div>
+        </div>
     </div>
-    <div id="rulesModal" class="modal" onclick="toggleRules(false)"><div class="modal-content" style="text-align: left;"><h3>牌型大小</h3><p>同花顺 > 四条 > 葫芦 > 同花 > 顺子 > 三条 > 两对 > 一对 > 高牌</p><button onclick="toggleRules(false)">关闭</button></div></div>
 
     <script>
         let ws;
